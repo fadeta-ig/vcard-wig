@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   absoluteUrl,
   emailAction,
+  formatPublicDisplayName,
   isPublicSlug,
   publicProfileUrl,
   readableBrandForeground,
@@ -13,6 +14,18 @@ import {
 } from "@/lib/public-profile";
 
 describe("public profile safety helpers", () => {
+  it("formats honorific prefixes and suffixes without duplicating existing titles", () => {
+    expect(formatPublicDisplayName("Feri Edy Purnomo", "Ir.", "S.T., M.M.")).toBe(
+      "Ir. Feri Edy Purnomo, S.T., M.M.",
+    );
+    expect(formatPublicDisplayName("Dr. Jane Doe, Ph.D.", "Dr.", "Ph.D.")).toBe(
+      "Dr. Jane Doe, Ph.D.",
+    );
+    expect(formatPublicDisplayName("  Jane   Doe  ", "", ", M.B.A.")).toBe(
+      "Jane Doe, M.B.A.",
+    );
+  });
+
   it("only permits credential-free HTTP(S) URLs", () => {
     expect(safeHttpUrl("https://example.com/profile?q=1")).toBe("https://example.com/profile?q=1");
     expect(safeHttpUrl("http://example.com")).toBe("http://example.com/");

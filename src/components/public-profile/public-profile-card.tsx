@@ -185,12 +185,12 @@ export function PublicProfileCard({
 
         <div className="public-profile-hero">
           {profile.photoUrl ? (
-            <Image src={profile.photoUrl} alt={`${copy.profilePhotoAlt} ${profile.displayName}`} width={132} height={132} className="public-profile-photo" priority />
+            <Image src={profile.photoUrl} alt={`${copy.profilePhotoAlt} ${profile.formattedName}`} width={132} height={132} className="public-profile-photo" priority />
           ) : (
             <div className="public-profile-initials" aria-hidden="true">{profile.displayName.split(/\s+/).slice(0, 2).map((word) => word[0]).join("").toUpperCase()}</div>
           )}
           <div className="public-profile-identity">
-            <h1>{profile.displayName}</h1>
+            <h1>{profile.formattedName}</h1>
             <p className="public-job-title">{profile.jobTitle}</p>
             {profile.department ? <p className="public-department">{profile.department}</p> : null}
             <p className="public-company-line">{profile.companyName}</p>
@@ -205,7 +205,7 @@ export function PublicProfileCard({
             {callAction ? <TrackedLink slug={profile.slug} eventType="PHONE_CLICK" className="public-action-button" href={callAction.href}><Phone size={19} aria-hidden="true" /><span>{copy.call}</span></TrackedLink> : null}
             {contact.whatsapp ? <TrackedLink slug={profile.slug} eventType="WHATSAPP_CLICK" className="public-action-button" href={contact.whatsapp.href} target="_blank" rel="noopener noreferrer"><SiWhatsapp className="public-whatsapp-icon" size={19} aria-hidden="true" /><span>{copy.whatsapp}</span></TrackedLink> : null}
             {contact.email ? <TrackedLink slug={profile.slug} eventType="EMAIL_CLICK" className="public-action-button" href={contact.email.href}><Mail size={19} aria-hidden="true" /><span>{copy.email}</span></TrackedLink> : null}
-            <ShareAction slug={profile.slug} url={canonicalUrl} copy={{ label: copy.share, title: copy.shareTitle, text: `${profile.displayName} — ${copy.shareText}`, copied: copy.linkCopied, failed: copy.shareFailed }} />
+            <ShareAction slug={profile.slug} url={canonicalUrl} copy={{ label: copy.share, title: copy.shareTitle, text: `${profile.formattedName} — ${copy.shareText}`, copied: copy.linkCopied, failed: copy.shareFailed }} />
           </div>
         </div>
 

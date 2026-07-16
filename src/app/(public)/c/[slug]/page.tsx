@@ -49,7 +49,7 @@ export async function generateMetadata({ params }: PageContext): Promise<Metadat
     : `${profile.jobTitle}${profile.department ? `, ${profile.department}` : ""} di ${profile.companyName}. Kartu kontak digital.`;
   const image = profile.photoUrl ?? profile.brand.logoUrl;
   return {
-    title: `${profile.displayName} — ${profile.jobTitle}`,
+    title: `${profile.formattedName} — ${profile.jobTitle}`,
     description,
     alternates: { canonical },
     robots: { index: true, follow: true },
@@ -60,9 +60,9 @@ export async function generateMetadata({ params }: PageContext): Promise<Metadat
       type: "website",
       url: canonical,
       siteName: profile.brand.name,
-      title: `${profile.displayName} — ${profile.jobTitle}`,
+      title: `${profile.formattedName} — ${profile.jobTitle}`,
       description,
-      ...(image ? { images: [{ url: absoluteUrl(origin, image), alt: profile.displayName }] } : {}),
+      ...(image ? { images: [{ url: absoluteUrl(origin, image), alt: profile.formattedName }] } : {}),
     },
   };
 }

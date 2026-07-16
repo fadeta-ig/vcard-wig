@@ -27,6 +27,7 @@ export type PublicSocialLink = {
 export type ActivePublicProfile = {
   slug: string;
   displayName: string;
+  formattedName: string;
   jobTitle: string;
   department?: string;
   companyName: string;
@@ -58,6 +59,50 @@ export type PublicProfileResult =
 const HEX_COLOR = /^#[0-9A-F]{6}$/i;
 const INTERNATIONAL_PHONE = /^\+[1-9]\d{6,14}$/;
 const PUBLIC_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+function cleanNamePart(value: string | null | undefined): string {
+  return value?.trim().replace(/\s+/g, " ") ?? "";
+}
+
+function comparableName(value: string): string {
+  return value.toLocaleLowerCase("id-ID").replace(/,\s*/g, " ").replace(/\s+/g, " ").trim();
+}
+
+export function formatPublicDisplayName(
+  displayName: string,
+  honorificPrefix?: string | null,
+  honorificSuffix?: string | null,
+): string {
+  const name = cleanNamePart(displayName);
+  const prefix = cleanNamePart(honorificPrefix);
+  const suffix = cleanNamePart(honorificSuffix).replace(/^[,\s]+/, "");
+  const comparableBaseName = comparableName(name);
+  const comparablePrefix = comparableName(prefix);
+  const hasPrefix = Boolean(
+    prefix &&
+      comparableBaseName.startsWith(comparablePrefix) &&
+      (
+        comparableBaseName.length === comparablePrefix.length ||
+        comparableBaseName[comparablePrefix.length] === " " ||
+        /[.,]$/.test(comparablePrefix)
+      ),
+  );
+  let formatted = prefix && !hasPrefix ? `${prefix} ${name}` : name;
+
+  const comparableSuffix = comparableName(suffix);
+  const comparableFormatted = comparableName(formatted);
+  const hasSuffix = Boolean(
+    suffix &&
+      (
+        comparableFormatted === comparableSuffix ||
+        comparableFormatted.endsWith(` ${comparableSuffix}`)
+      ),
+  );
+  if (suffix && !hasSuffix) {
+    formatted = `${formatted.replace(/[,\s]+$/, "")}, ${suffix}`;
+  }
+  return formatted;
+}
 
 export function safeBrandColor(value: string | null | undefined): string {
   return value && HEX_COLOR.test(value) ? value.toUpperCase() : DEFAULT_PUBLIC_BRAND;

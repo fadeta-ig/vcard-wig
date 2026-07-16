@@ -3,6 +3,7 @@ import type { ProfileSection, SocialPlatform } from "@/lib/profile-options";
 import { SOCIAL_PLATFORMS } from "@/lib/profile-options";
 import {
   emailAction,
+  formatPublicDisplayName,
   isPublicSlug,
   readableBrandForeground,
   safeBrandColor,
@@ -22,6 +23,8 @@ import { normalizeProfileSectionOrder } from "@/services/profile.service";
 const publicProfileSelect = {
   slug: true,
   displayName: true,
+  honorificPrefix: true,
+  honorificSuffix: true,
   jobTitle: true,
   department: true,
   companyName: true,
@@ -160,6 +163,11 @@ export async function getPublicProfileBySlug(slug: string): Promise<PublicProfil
     profile: {
       slug: profile.slug,
       displayName: profile.displayName,
+      formattedName: formatPublicDisplayName(
+        profile.displayName,
+        profile.honorificPrefix,
+        profile.honorificSuffix,
+      ),
       jobTitle: profile.jobTitle,
       ...(profile.department ? { department: profile.department } : {}),
       companyName: profile.companyName,

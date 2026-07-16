@@ -54,6 +54,8 @@ async function createFixture(
       firstName: "Jane",
       lastName: "Doe",
       displayName: "Jane Secret Doe",
+      honorificPrefix: "Dr.",
+      honorificSuffix: "Ph.D.",
       jobTitle: "Operations Director",
       department: "Operations",
       companyName: company.name,
@@ -180,6 +182,7 @@ describe.sequential("public profile phase 4 integration", () => {
     ]);
     expect(result.profile.contact.whatsapp?.href).toBe("https://wa.me/6281234567890");
     expect(result.profile.contact.email?.href).toBe("mailto:hidden@example.com");
+    expect(result.profile.formattedName).toBe("Dr. Jane Secret Doe, Ph.D.");
   });
 
   it("keeps company branding isolated and hides profiles belonging to inactive companies", async () => {
