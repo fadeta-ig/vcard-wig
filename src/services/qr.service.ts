@@ -1,11 +1,11 @@
 import { createHash } from "node:crypto";
-import path from "node:path";
 import QRCode from "qrcode";
 import sharp from "sharp";
 import type { z } from "zod";
 import { AppError } from "@/lib/api";
 import { getEnvironment } from "@/lib/env";
 import { publicProfileUrl, safePublicAsset } from "@/lib/public-profile";
+import { resolvePublicUploadPath } from "@/lib/upload-storage";
 import { qrExportQuerySchema } from "@/lib/validation";
 import type { AuthenticatedSession } from "@/services/auth.service";
 import { getProfileForSession } from "@/services/profile.service";
@@ -54,11 +54,7 @@ export function qrCacheSizeForTests(): number {
 
 function publicFilePath(publicPath: string, category: "companies"): string | undefined {
   const safePath = safePublicAsset(publicPath, category);
-  if (!safePath) return undefined;
-  const publicRoot = path.resolve(process.cwd(), "public");
-  const target = path.resolve(publicRoot, safePath.replace(/^\/+/, ""));
-  const allowedRoot = path.resolve(publicRoot, "uploads", category);
-  return target.startsWith(`${allowedRoot}${path.sep}`) ? target : undefined;
+  return safePath ? resolvePublicUploadPath(safePath, category) : undefined;
 }
 
 async function logoPng(publicPath: string, maximumSize: number): Promise<Buffer> {

@@ -1,9 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, rm } from "node:fs/promises";
-import path from "node:path";
 import sharp from "sharp";
 import { AppError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
+import {
+  publicPathForStoredFile,
+  resolvePublicUploadPath,
+  resolveUploadSegments,
+} from "@/lib/upload-storage";
 import type { AuthenticatedSession } from "@/services/auth.service";
 import { getProfileForSession } from "@/services/profile.service";
 
@@ -16,38 +20,9 @@ const MIME_FORMATS: Record<string, string> = {
   "image/webp": "webp",
 };
 
-function profileUploadRoot(): string {
-  return path.resolve(process.cwd(), "public", "uploads", "profiles");
-}
-
-function assertWithinRoot(target: string): void {
-  const root = profileUploadRoot();
-  if (target !== root && !target.startsWith(`${root}${path.sep}`)) {
-    throw new AppError(500, "UPLOAD_PATH_INVALID", "Lokasi file upload tidak valid.");
-  }
-}
-
-function toPublicPath(filePath: string): string {
-  const publicRoot = path.resolve(process.cwd(), "public");
-  const relative = path.relative(publicRoot, filePath);
-  if (relative.startsWith("..") || path.isAbsolute(relative)) {
-    throw new AppError(500, "UPLOAD_PATH_INVALID", "Lokasi file upload tidak valid.");
-  }
-  return `/${relative.split(path.sep).join("/")}`;
-}
-
 async function deleteProfileAsset(publicPath: string | null): Promise<void> {
-  if (!publicPath?.startsWith("/uploads/profiles/")) return;
-  const target = path.resolve(
-    process.cwd(),
-    "public",
-    publicPath.replace(/^\/+/, ""),
-  );
-  try {
-    assertWithinRoot(target);
-  } catch {
-    return;
-  }
+  const target = resolvePublicUploadPath(publicPath, "profiles");
+  if (!target) return;
   let lastError: unknown;
   for (let attempt = 1; attempt <= 7; attempt += 1) {
     try {
@@ -98,15 +73,26 @@ export async function uploadProfilePhoto(
     );
   }
 
-  const directory = path.resolve(profileUploadRoot(), profile.companyId, profileId);
-  assertWithinRoot(directory);
+  const directory = resolveUploadSegments("profiles", [profile.companyId, profileId]);
+  if (!directory) {
+    throw new AppError(500, "UPLOAD_PATH_INVALID", "Lokasi file upload tidak valid.");
+  }
   await mkdir(directory, { recursive: true });
 
   const token = randomUUID();
-  const photoFile = path.resolve(directory, `photo-${token}.webp`);
-  const thumbnailFile = path.resolve(directory, `thumb-${token}.webp`);
-  assertWithinRoot(photoFile);
-  assertWithinRoot(thumbnailFile);
+  const photoFile = resolveUploadSegments("profiles", [
+    profile.companyId,
+    profileId,
+    `photo-${token}.webp`,
+  ]);
+  const thumbnailFile = resolveUploadSegments("profiles", [
+    profile.companyId,
+    profileId,
+    `thumb-${token}.webp`,
+  ]);
+  if (!photoFile || !thumbnailFile) {
+    throw new AppError(500, "UPLOAD_PATH_INVALID", "Lokasi file upload tidak valid.");
+  }
 
   try {
     await Promise.all([
@@ -131,8 +117,8 @@ export async function uploadProfilePhoto(
     throw new AppError(422, "IMAGE_PROCESSING_FAILED", "Foto tidak dapat diproses.");
   }
 
-  const profilePhoto = toPublicPath(photoFile);
-  const profileThumbnail = toPublicPath(thumbnailFile);
+  const profilePhoto = publicPathForStoredFile(photoFile, "profiles");
+  const profileThumbnail = publicPathForStoredFile(thumbnailFile, "profiles");
   try {
     await prisma.$transaction([
       prisma.contactProfile.update({

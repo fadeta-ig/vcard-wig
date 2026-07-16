@@ -1,9 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, rm } from "node:fs/promises";
-import path from "node:path";
 import sharp from "sharp";
 import { AppError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
+import {
+  publicPathForStoredFile,
+  resolvePublicUploadPath,
+  resolveUploadSegments,
+} from "@/lib/upload-storage";
 import type { AuthenticatedSession } from "@/services/auth.service";
 
 export type CompanyAssetType = "logo" | "favicon";
@@ -16,25 +20,9 @@ const MIME_FORMATS: Record<string, string> = {
   "image/webp": "webp",
 };
 
-function localUploadRoot(): string {
-  return path.join(process.cwd(), "public", "uploads");
-}
-
-function toPublicPath(filePath: string): string {
-  const publicRoot = path.resolve(process.cwd(), "public");
-  const relative = path.relative(publicRoot, filePath);
-  if (relative.startsWith("..") || path.isAbsolute(relative)) {
-    throw new AppError(500, "UPLOAD_PATH_INVALID", "Lokasi file upload tidak valid.");
-  }
-  return `/${relative.split(path.sep).join("/")}`;
-}
-
 async function deletePublicAsset(publicPath: string | null): Promise<void> {
-  if (!publicPath?.startsWith("/uploads/companies/")) return;
-  const publicRoot = path.resolve(process.cwd(), "public");
-  const target = path.resolve(publicRoot, publicPath.replace(/^\/+/, ""));
-  const allowedRoot = path.resolve(publicRoot, "uploads", "companies");
-  if (!target.startsWith(`${allowedRoot}${path.sep}`)) return;
+  const target = resolvePublicUploadPath(publicPath, "companies");
+  if (!target) return;
   await rm(target, { force: true }).catch((error: unknown) => {
     console.error("Gagal membersihkan aset lama", error);
   });
@@ -69,14 +57,17 @@ export async function uploadCompanyAsset(
   }
 
   const extension = assetType === "logo" ? "webp" : "png";
-  const directory = path.resolve(localUploadRoot(), "companies", companyId);
-  const allowedRoot = path.resolve(localUploadRoot(), "companies");
-  if (!directory.startsWith(`${allowedRoot}${path.sep}`)) {
+  const directory = resolveUploadSegments("companies", [companyId]);
+  if (!directory) {
     throw new AppError(500, "UPLOAD_PATH_INVALID", "Lokasi file upload tidak valid.");
   }
   await mkdir(directory, { recursive: true });
 
-  const outputPath = path.resolve(directory, `${assetType}-${randomUUID()}.${extension}`);
+  const fileName = `${assetType}-${randomUUID()}.${extension}`;
+  const outputPath = resolveUploadSegments("companies", [companyId, fileName]);
+  if (!outputPath) {
+    throw new AppError(500, "UPLOAD_PATH_INVALID", "Lokasi file upload tidak valid.");
+  }
   if (assetType === "logo") {
     await image
       .rotate()
@@ -95,7 +86,7 @@ export async function uploadCompanyAsset(
       .toFile(outputPath);
   }
 
-  const publicPath = toPublicPath(outputPath);
+  const publicPath = publicPathForStoredFile(outputPath, "companies");
   const oldPath = assetType === "logo" ? company.companyLogo : company.favicon;
 
   try {

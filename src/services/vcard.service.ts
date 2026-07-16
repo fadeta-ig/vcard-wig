@@ -1,9 +1,9 @@
-import path from "node:path";
 import sharp from "sharp";
 import { Prisma, ProfileStatus } from "@/generated/prisma/client";
 import { AppError } from "@/lib/api";
 import { safeHttpUrl, safePublicAsset } from "@/lib/public-profile";
 import { prisma } from "@/lib/prisma";
+import { resolvePublicUploadPath } from "@/lib/upload-storage";
 import { generateVCard, type VCardSource } from "@/lib/vcard";
 import type { AuthenticatedSession } from "@/services/auth.service";
 import { getProfileForSession } from "@/services/profile.service";
@@ -141,10 +141,8 @@ async function photoAsJpegBase64(profile: VCardProfile): Promise<string | undefi
   if (!profile.showPhoto) return undefined;
   const publicPath = safePublicAsset(profile.profileThumbnail ?? profile.profilePhoto, "profiles");
   if (!publicPath) return undefined;
-  const publicRoot = path.resolve(process.cwd(), "public");
-  const filePath = path.resolve(publicRoot, publicPath.replace(/^\/+/, ""));
-  const allowedRoot = path.resolve(publicRoot, "uploads", "profiles");
-  if (!filePath.startsWith(`${allowedRoot}${path.sep}`)) return undefined;
+  const filePath = resolvePublicUploadPath(publicPath, "profiles");
+  if (!filePath) return undefined;
   try {
     const jpeg = await sharp(filePath)
       .resize(160, 160, { fit: "cover" })
