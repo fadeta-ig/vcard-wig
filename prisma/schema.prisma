@@ -1,0 +1,228 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+}
+
+enum ProfileStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum ActivityEventType {
+  PROFILE_VIEW
+  VCARD_DOWNLOAD
+  PHONE_CLICK
+  WHATSAPP_CLICK
+  EMAIL_CLICK
+  SOCIAL_CLICK
+  SHARE_CLICK
+}
+
+model User {
+  id                 String                  @id @default(cuid())
+  username           String                  @unique @db.VarChar(64)
+  name               String                  @db.VarChar(100)
+  email              String?                 @unique @db.VarChar(191)
+  passwordHash       String                  @db.VarChar(255)
+  role               UserRole                @default(ADMIN)
+  isActive           Boolean                 @default(true)
+  mustChangePassword Boolean                 @default(false)
+  lastLoginAt        DateTime?
+  memberships        UserCompanyMembership[]
+  profilesCreated    ContactProfile[]        @relation("ProfileCreator")
+  sessions           Session[]
+  auditLogs          AuditLog[]
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+
+  @@index([role, isActive])
+  @@index([name])
+}
+
+model Company {
+  id                  String                  @id @default(cuid())
+  name                String                  @db.VarChar(120)
+  slug                String                  @unique @db.VarChar(80)
+  legalName           String?                 @db.VarChar(160)
+  companyLogo         String?                 @db.VarChar(500)
+  favicon             String?                 @db.VarChar(500)
+  primaryColor        String                  @default("#1E3A5F") @db.Char(7)
+  secondaryColor      String?                 @db.Char(7)
+  website             String?                 @db.VarChar(500)
+  email               String?                 @db.VarChar(191)
+  phone               String?                 @db.VarChar(32)
+  address             String?                 @db.Text
+  qrLogoEnabled       Boolean                 @default(false)
+  defaultQrForeground String                  @default("#111827") @db.Char(7)
+  defaultQrBackground String                  @default("#FFFFFF") @db.Char(7)
+  isActive            Boolean                 @default(true)
+  memberships         UserCompanyMembership[]
+  profiles            ContactProfile[]
+  auditLogs           AuditLog[]
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+
+  @@index([isActive, name])
+}
+
+model UserCompanyMembership {
+  id        String   @id @default(cuid())
+  userId    String
+  companyId String
+  isActive  Boolean  @default(true)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, companyId])
+  @@index([companyId, isActive])
+  @@index([userId, isActive])
+}
+
+model Session {
+  id            String    @id @default(cuid())
+  tokenHash     String    @unique @db.Char(64)
+  csrfTokenHash String    @db.Char(64)
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt     DateTime
+  lastSeenAt    DateTime  @default(now())
+  revokedAt     DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([userId, revokedAt, expiresAt])
+  @@index([expiresAt])
+}
+
+model LoginThrottle {
+  identifierHash  String    @id @db.Char(64)
+  windowStartedAt DateTime
+  failedAttempts  Int       @default(0)
+  lockedUntil     DateTime?
+  updatedAt       DateTime  @updatedAt
+
+  @@index([lockedUntil])
+}
+
+model ContactProfile {
+  id                 String          @id @default(cuid())
+  companyId          String
+  company            Company         @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  slug               String          @unique @db.VarChar(100)
+  firstName          String          @db.VarChar(100)
+  lastName           String?         @db.VarChar(100)
+  displayName        String          @db.VarChar(120)
+  honorificPrefix    String?         @db.VarChar(30)
+  honorificSuffix    String?         @db.VarChar(30)
+  jobTitle           String          @db.VarChar(120)
+  department         String?         @db.VarChar(120)
+  companyName        String          @db.VarChar(160)
+  email              String          @db.VarChar(191)
+  workPhone          String?         @db.VarChar(32)
+  mobilePhone        String?         @db.VarChar(32)
+  whatsappNumber     String?         @db.VarChar(32)
+  website            String?         @db.VarChar(500)
+  addressLine1       String?         @db.VarChar(255)
+  addressLine2       String?         @db.VarChar(255)
+  city               String?         @db.VarChar(100)
+  province           String?         @db.VarChar(100)
+  postalCode         String?         @db.VarChar(20)
+  country            String?         @db.VarChar(100)
+  shortBio           String?         @db.Text
+  profilePhoto       String?         @db.VarChar(500)
+  profileThumbnail   String?         @db.VarChar(500)
+  status             ProfileStatus   @default(DRAFT)
+  showPhoto          Boolean         @default(true)
+  showEmail          Boolean         @default(true)
+  showPhone          Boolean         @default(true)
+  showAddress        Boolean         @default(true)
+  showSocialLinks    Boolean         @default(true)
+  sectionOrder       Json?
+  viewCount          Int             @default(0)
+  vcardDownloadCount Int             @default(0)
+  publishedAt        DateTime?
+  createdById        String
+  createdBy          User            @relation("ProfileCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  socialLinks        SocialLink[]
+  events             ActivityEvent[]
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  @@index([companyId, status, createdAt])
+  @@index([companyId, displayName])
+  @@index([companyId, companyName])
+  @@index([status])
+}
+
+model SocialLink {
+  id               String         @id @default(cuid())
+  contactProfileId String
+  contactProfile   ContactProfile @relation(fields: [contactProfileId], references: [id], onDelete: Cascade)
+  platform         String         @db.VarChar(50)
+  label            String?        @db.VarChar(80)
+  username         String?        @db.VarChar(100)
+  url              String         @db.VarChar(500)
+  icon             String?        @db.VarChar(50)
+  sortOrder        Int            @default(0)
+  isActive         Boolean        @default(true)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([contactProfileId, isActive, sortOrder])
+}
+
+model ActivityEvent {
+  id               String            @id @default(cuid())
+  contactProfileId String
+  contactProfile   ContactProfile    @relation(fields: [contactProfileId], references: [id], onDelete: Cascade)
+  eventType        ActivityEventType
+  visitorTokenHash String?           @db.Char(64)
+  userAgent        String?           @db.Text
+  referrer         String?           @db.Text
+  createdAt        DateTime          @default(now())
+
+  @@index([contactProfileId, eventType, createdAt])
+  @@index([contactProfileId, visitorTokenHash, eventType, createdAt])
+  @@index([createdAt])
+}
+
+model PublicRateLimit {
+  keyHash         String   @id @db.Char(64)
+  windowStartedAt DateTime
+  requestCount    Int      @default(1)
+  expiresAt       DateTime
+  updatedAt       DateTime @updatedAt
+
+  @@index([expiresAt])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  companyId  String?
+  company    Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  action     String   @db.VarChar(80)
+  entityType String   @db.VarChar(80)
+  entityId   String?  @db.VarChar(191)
+  oldValues  Json?
+  newValues  Json?
+  createdAt  DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([companyId, createdAt])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
