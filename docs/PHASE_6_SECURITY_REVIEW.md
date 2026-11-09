@@ -3,6 +3,8 @@
 Review date: 15 July 2026  
 Scope: application-layer controls implemented through Phase 6.
 
+**Historical snapshot.** The dependency findings and verification below describe 15 July 2026. They are superseded for the current source by the [9 November 2026 remediation report](remediation-2026-11-09/IMPLEMENTASI-PERBAIKAN-VCARD.md) and its final verification artifacts. Do not treat the July accepted advisories as the current dependency status.
+
 ## Authorization matrix
 
 | Capability | Anonymous | Admin | Super Admin |

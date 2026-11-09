@@ -1,9 +1,10 @@
 import { cookies } from "next/headers";
 import type { NextRequest, NextResponse } from "next/server";
-import { UserRole } from "@/generated/prisma/client";
+import { Prisma, UserRole } from "@/generated/prisma/client";
 import { AppError } from "@/lib/api";
 import { getEnvironment } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
+import { verifyUserMfa } from "@/services/mfa.service";
 import {
   COMPANY_COOKIE_NAME,
   CSRF_COOKIE_NAME,
@@ -68,7 +69,9 @@ function normalizedIdentifier(identifier: string): string {
 }
 
 async function assertLoginAllowed(identifierHash: string): Promise<void> {
-  const record = await prisma.loginThrottle.findUnique({ where: { identifierHash } });
+  const record = await prisma.loginThrottle.findUnique({
+    where: { identifierHash },
+  });
   if (!record?.lockedUntil || record.lockedUntil <= new Date()) return;
 
   const retryAfterSeconds = Math.max(
@@ -85,36 +88,17 @@ async function assertLoginAllowed(identifierHash: string): Promise<void> {
 
 async function recordLoginFailure(identifierHash: string): Promise<void> {
   const now = new Date();
-  const current = await prisma.loginThrottle.findUnique({ where: { identifierHash } });
-  const windowExpired =
-    !current || now.getTime() - current.windowStartedAt.getTime() >= LOGIN_WINDOW_MS;
-
-  if (windowExpired) {
-    await prisma.loginThrottle.upsert({
-      where: { identifierHash },
-      update: {
-        windowStartedAt: now,
-        failedAttempts: 1,
-        lockedUntil: null,
-      },
-      create: {
-        identifierHash,
-        windowStartedAt: now,
-        failedAttempts: 1,
-      },
-    });
-    return;
-  }
-
-  const failedAttempts = current.failedAttempts + 1;
-  await prisma.loginThrottle.update({
-    where: { identifierHash },
-    data: {
-      failedAttempts,
-      lockedUntil:
-        failedAttempts >= MAX_LOGIN_FAILURES ? new Date(now.getTime() + LOGIN_LOCK_MS) : null,
-    },
-  });
+  const cutoff = new Date(now.getTime() - LOGIN_WINDOW_MS);
+  const lockedUntil = new Date(now.getTime() + LOGIN_LOCK_MS);
+  await prisma.$executeRaw(Prisma.sql`
+    INSERT INTO LoginThrottle (identifierHash, windowStartedAt, failedAttempts, lockedUntil, updatedAt)
+    VALUES (${identifierHash}, ${now}, 1, NULL, ${now})
+    ON DUPLICATE KEY UPDATE
+      failedAttempts = IF(windowStartedAt <= ${cutoff}, 1, failedAttempts + 1),
+      lockedUntil = IF(failedAttempts >= ${MAX_LOGIN_FAILURES}, ${lockedUntil}, NULL),
+      windowStartedAt = IF(windowStartedAt <= ${cutoff}, ${now}, windowStartedAt),
+      updatedAt = ${now}
+  `);
 }
 
 async function clearLoginThrottle(identifierHash: string): Promise<void> {
@@ -124,6 +108,7 @@ async function clearLoginThrottle(identifierHash: string): Promise<void> {
 export async function authenticateUser(
   identifierInput: string,
   password: string,
+  mfaCode?: string,
 ): Promise<SessionBundle> {
   const identifier = normalizedIdentifier(identifierInput);
   const identifierHash = hashToken(identifier);
@@ -139,6 +124,7 @@ export async function authenticateUser(
       name: true,
       email: true,
       passwordHash: true,
+      mfaSecretEncrypted: true,
       role: true,
       isActive: true,
       mustChangePassword: true,
@@ -158,6 +144,24 @@ export async function authenticateUser(
     );
   }
 
+  if (user.mfaSecretEncrypted) {
+    if (!mfaCode)
+      throw new AppError(
+        401,
+        "MFA_REQUIRED",
+        "Masukkan kode authenticator atau kode pemulihan.",
+      );
+    if (
+      !(await verifyUserMfa(user.id, user.mfaSecretEncrypted, mfaCode.trim()))
+    ) {
+      await recordLoginFailure(identifierHash);
+      throw new AppError(
+        401,
+        "MFA_INVALID",
+        "Kode authenticator atau pemulihan tidak valid atau sudah digunakan.",
+      );
+    }
+  }
   await clearLoginThrottle(identifierHash);
 
   const sessionToken = createOpaqueToken();
@@ -216,7 +220,9 @@ export async function authenticateUser(
   };
 }
 
-async function findSession(sessionToken: string | undefined): Promise<AuthenticatedSession | null> {
+async function findSession(
+  sessionToken: string | undefined,
+): Promise<AuthenticatedSession | null> {
   if (!sessionToken || sessionToken.length > 200) return null;
 
   const session = await prisma.session.findUnique({
@@ -241,7 +247,8 @@ async function findSession(sessionToken: string | undefined): Promise<Authentica
     },
   });
 
-  if (!session || session.revokedAt || session.expiresAt <= new Date()) return null;
+  if (!session || session.revokedAt || session.expiresAt <= new Date())
+    return null;
 
   if (!session.user.isActive) {
     await prisma.session.updateMany({
@@ -251,7 +258,10 @@ async function findSession(sessionToken: string | undefined): Promise<Authentica
     return null;
   }
 
-  if (Date.now() - session.lastSeenAt.getTime() >= LAST_SEEN_WRITE_INTERVAL_MS) {
+  if (
+    Date.now() - session.lastSeenAt.getTime() >=
+    LAST_SEEN_WRITE_INTERVAL_MS
+  ) {
     const lastSeenAt = new Date();
     await prisma.session.updateMany({
       where: { id: session.id, revokedAt: null },
@@ -269,7 +279,9 @@ async function findSession(sessionToken: string | undefined): Promise<Authentica
   };
 }
 
-export function getSessionFromRequest(request: NextRequest): Promise<AuthenticatedSession | null> {
+export function getSessionFromRequest(
+  request: NextRequest,
+): Promise<AuthenticatedSession | null> {
   return findSession(request.cookies.get(SESSION_COOKIE_NAME)?.value);
 }
 
@@ -284,7 +296,11 @@ export async function requireRequestSession(
 ): Promise<AuthenticatedSession> {
   const session = await getSessionFromRequest(request);
   if (!session) {
-    throw new AppError(401, "AUTHENTICATION_REQUIRED", "Silakan login untuk melanjutkan.");
+    throw new AppError(
+      401,
+      "AUTHENTICATION_REQUIRED",
+      "Silakan login untuk melanjutkan.",
+    );
   }
 
   if (session.user.mustChangePassword && !options?.allowPasswordChangePending) {
@@ -298,7 +314,10 @@ export async function requireRequestSession(
   return session;
 }
 
-export function setAuthCookies(response: NextResponse, bundle: SessionBundle): void {
+export function setAuthCookies(
+  response: NextResponse,
+  bundle: SessionBundle,
+): void {
   response.cookies.set(SESSION_COOKIE_NAME, bundle.sessionToken, {
     httpOnly: true,
     secure: secureCookiesEnabled(),
@@ -318,7 +337,11 @@ export function setAuthCookies(response: NextResponse, bundle: SessionBundle): v
 }
 
 export function clearAuthCookies(response: NextResponse): void {
-  for (const cookieName of [SESSION_COOKIE_NAME, CSRF_COOKIE_NAME, COMPANY_COOKIE_NAME]) {
+  for (const cookieName of [
+    SESSION_COOKIE_NAME,
+    CSRF_COOKIE_NAME,
+    COMPANY_COOKIE_NAME,
+  ]) {
     response.cookies.set(cookieName, "", {
       httpOnly: cookieName !== CSRF_COOKIE_NAME,
       secure: secureCookiesEnabled(),
@@ -329,7 +352,9 @@ export function clearAuthCookies(response: NextResponse): void {
   }
 }
 
-export async function revokeSession(session: AuthenticatedSession): Promise<void> {
+export async function revokeSession(
+  session: AuthenticatedSession,
+): Promise<void> {
   await prisma.$transaction([
     prisma.session.updateMany({
       where: { id: session.id, revokedAt: null },
@@ -357,7 +382,11 @@ export async function changePassword(
   });
 
   if (!user || !(await verifyPassword(user.passwordHash, currentPassword))) {
-    throw new AppError(400, "CURRENT_PASSWORD_INVALID", "Password saat ini tidak sesuai.");
+    throw new AppError(
+      400,
+      "CURRENT_PASSWORD_INVALID",
+      "Password saat ini tidak sesuai.",
+    );
   }
 
   const passwordHash = await hashPassword(newPassword);
@@ -368,7 +397,11 @@ export async function changePassword(
       data: { passwordHash, mustChangePassword: false },
     }),
     prisma.session.updateMany({
-      where: { userId: session.user.id, id: { not: session.id }, revokedAt: null },
+      where: {
+        userId: session.user.id,
+        id: { not: session.id },
+        revokedAt: null,
+      },
       data: { revokedAt: now },
     }),
     prisma.auditLog.create({

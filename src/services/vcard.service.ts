@@ -1,7 +1,11 @@
 import sharp from "sharp";
 import { Prisma, ProfileStatus } from "@/generated/prisma/client";
 import { AppError } from "@/lib/api";
-import { safeHttpUrl, safePublicAsset } from "@/lib/public-profile";
+import {
+  safeHttpUrl,
+  safePublicAsset,
+  formatPublicDisplayName,
+} from "@/lib/public-profile";
 import { prisma } from "@/lib/prisma";
 import { resolvePublicUploadPath } from "@/lib/upload-storage";
 import { generateVCard, type VCardSource } from "@/lib/vcard";
@@ -34,6 +38,9 @@ type VCardProfile = {
   showPhoto: boolean;
   showEmail: boolean;
   showPhone: boolean;
+  showWorkPhone?: boolean;
+  showMobilePhone?: boolean;
+  showWhatsapp?: boolean;
   showAddress: boolean;
   showSocialLinks: boolean;
   socialLinks: {
@@ -73,6 +80,9 @@ const publicVCardSelect = {
   showPhoto: true,
   showEmail: true,
   showPhone: true,
+  showWorkPhone: true,
+  showMobilePhone: true,
+  showWhatsapp: true,
   showAddress: true,
   showSocialLinks: true,
   socialLinks: {
@@ -97,9 +107,10 @@ function sourceFromProfile(profile: VCardProfile): VCardSource {
     ? profile.socialLinks.flatMap((link) => {
         const url = safeHttpUrl(link.url);
         if (!link.isActive || !url) return [];
-        const fallback = link.platform === "X"
-          ? "X"
-          : link.platform.charAt(0) + link.platform.slice(1).toLowerCase();
+        const fallback =
+          link.platform === "X"
+            ? "X"
+            : link.platform.charAt(0) + link.platform.slice(1).toLowerCase();
         return [{ label: link.label ?? fallback, url }];
       })
     : [];
@@ -107,15 +118,33 @@ function sourceFromProfile(profile: VCardProfile): VCardSource {
   return {
     firstName: profile.firstName,
     ...(profile.lastName ? { lastName: profile.lastName } : {}),
-    displayName: profile.displayName,
-    ...(profile.honorificPrefix ? { honorificPrefix: profile.honorificPrefix } : {}),
-    ...(profile.honorificSuffix ? { honorificSuffix: profile.honorificSuffix } : {}),
+    displayName: formatPublicDisplayName(
+      profile.displayName,
+      profile.honorificPrefix,
+      profile.honorificSuffix,
+    ),
+    ...(profile.honorificPrefix
+      ? { honorificPrefix: profile.honorificPrefix }
+      : {}),
+    ...(profile.honorificSuffix
+      ? { honorificSuffix: profile.honorificSuffix }
+      : {}),
     companyName: profile.companyName,
     jobTitle: profile.jobTitle,
     ...(profile.department ? { department: profile.department } : {}),
-    ...(profile.showPhone && profile.workPhone ? { workPhone: profile.workPhone } : {}),
-    ...(profile.showPhone && profile.mobilePhone ? { mobilePhone: profile.mobilePhone } : {}),
-    ...(profile.showPhone && profile.whatsappNumber
+    ...(profile.showPhone &&
+    profile.showWorkPhone !== false &&
+    profile.workPhone
+      ? { workPhone: profile.workPhone }
+      : {}),
+    ...(profile.showPhone &&
+    profile.showMobilePhone !== false &&
+    profile.mobilePhone
+      ? { mobilePhone: profile.mobilePhone }
+      : {}),
+    ...(profile.showPhone &&
+    profile.showWhatsapp !== false &&
+    profile.whatsappNumber
       ? { whatsappNumber: profile.whatsappNumber }
       : {}),
     ...(profile.showEmail ? { email: profile.email } : {}),
@@ -137,9 +166,14 @@ function sourceFromProfile(profile: VCardProfile): VCardSource {
   };
 }
 
-async function photoAsJpegBase64(profile: VCardProfile): Promise<string | undefined> {
+async function photoAsJpegBase64(
+  profile: VCardProfile,
+): Promise<string | undefined> {
   if (!profile.showPhoto) return undefined;
-  const publicPath = safePublicAsset(profile.profileThumbnail ?? profile.profilePhoto, "profiles");
+  const publicPath = safePublicAsset(
+    profile.profileThumbnail ?? profile.profilePhoto,
+    "profiles",
+  );
   if (!publicPath) return undefined;
   const filePath = resolvePublicUploadPath(publicPath, "profiles");
   if (!filePath) return undefined;
@@ -156,10 +190,18 @@ async function photoAsJpegBase64(profile: VCardProfile): Promise<string | undefi
   }
 }
 
-async function renderProfileVCard(profile: VCardProfile, includePhoto: boolean): Promise<string> {
+async function renderProfileVCard(
+  profile: VCardProfile,
+  includePhoto: boolean,
+): Promise<string> {
   const source = sourceFromProfile(profile);
-  const photoJpegBase64 = includePhoto ? await photoAsJpegBase64(profile) : undefined;
-  return generateVCard({ ...source, ...(photoJpegBase64 ? { photoJpegBase64 } : {}) });
+  const photoJpegBase64 = includePhoto
+    ? await photoAsJpegBase64(profile)
+    : undefined;
+  return generateVCard({
+    ...source,
+    ...(photoJpegBase64 ? { photoJpegBase64 } : {}),
+  });
 }
 
 export async function getAdminVCard(
@@ -174,7 +216,9 @@ export async function getAdminVCard(
   };
 }
 
-export async function getPublicVCard(slug: string): Promise<{ profileId: string; slug: string; content: string }> {
+export async function getPublicVCard(
+  slug: string,
+): Promise<{ profileId: string; slug: string; content: string }> {
   const profile = await prisma.contactProfile.findFirst({
     where: {
       slug,
@@ -183,8 +227,13 @@ export async function getPublicVCard(slug: string): Promise<{ profileId: string;
     },
     select: publicVCardSelect,
   });
-  if (!profile) throw new AppError(404, "PROFILE_NOT_FOUND", "Profil tidak ditemukan.");
-  return { profileId: profile.id, slug: profile.slug, content: await renderProfileVCard(profile, true) };
+  if (!profile)
+    throw new AppError(404, "PROFILE_NOT_FOUND", "Profil tidak ditemukan.");
+  return {
+    profileId: profile.id,
+    slug: profile.slug,
+    content: await renderProfileVCard(profile, true),
+  };
 }
 
 export async function getDirectVCard(

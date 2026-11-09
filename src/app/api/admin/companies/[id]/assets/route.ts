@@ -1,5 +1,11 @@
 import type { NextRequest } from "next/server";
-import { AppError, readJsonBody, routeErrorResponse, successResponse } from "@/lib/api";
+import {
+  AppError,
+  readFormBody,
+  readJsonBody,
+  routeErrorResponse,
+  successResponse,
+} from "@/lib/api";
 import { assertCsrf } from "@/lib/security/request";
 import { requireSuperAdmin } from "@/services/authorization.service";
 import {
@@ -21,11 +27,15 @@ export async function POST(request: NextRequest, context: RouteContext) {
   try {
     const session = await requireSuperAdmin(request);
     assertCsrf(request, session);
-    const formData = await request.formData();
+    const formData = await readFormBody(request);
     const type = assetType(formData.get("assetType"));
     const file = formData.get("file");
     if (!(file instanceof File)) {
-      throw new AppError(422, "FILE_REQUIRED", "Pilih file yang akan diunggah.");
+      throw new AppError(
+        422,
+        "FILE_REQUIRED",
+        "Pilih file yang akan diunggah.",
+      );
     }
     const { id } = await context.params;
     return successResponse(await uploadCompanyAsset(session, id, type, file));

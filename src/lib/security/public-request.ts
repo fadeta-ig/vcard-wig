@@ -1,6 +1,7 @@
 import type { NextRequest, NextResponse } from "next/server";
 import { AppError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
+import { retryDatabaseWrite } from "@/lib/database-retry";
 import { secureCookiesEnabled } from "@/lib/security/auth-constants";
 import { createOpaqueToken, hashToken } from "@/lib/security/crypto";
 
@@ -14,12 +15,16 @@ export type VisitorIdentity = {
 
 export function visitorIdentity(request: NextRequest): VisitorIdentity {
   const existing = request.cookies.get(VISITOR_COOKIE_NAME)?.value;
-  if (existing && VISITOR_TOKEN.test(existing)) return { tokenHash: hashToken(existing) };
+  if (existing && VISITOR_TOKEN.test(existing))
+    return { tokenHash: hashToken(existing) };
   const newToken = createOpaqueToken();
   return { tokenHash: hashToken(newToken), newToken };
 }
 
-export function setVisitorCookie(response: NextResponse, identity: VisitorIdentity): void {
+export function setVisitorCookie(
+  response: NextResponse,
+  identity: VisitorIdentity,
+): void {
   if (!identity.newToken) return;
   response.cookies.set(VISITOR_COOKIE_NAME, identity.newToken, {
     httpOnly: true,
@@ -36,13 +41,17 @@ type RateLimitPolicy = {
   windowSeconds: number;
 };
 
-const POLICIES: Record<"profile" | "vcard" | "event", RateLimitPolicy> = {
+const POLICIES: Record<
+  "profile" | "vcard" | "event" | "page",
+  RateLimitPolicy
+> = {
+  page: { visitorLimit: 180, globalLimit: 1200, windowSeconds: 60 },
   profile: { visitorLimit: 120, globalLimit: 1_200, windowSeconds: 60 },
   vcard: { visitorLimit: 20, globalLimit: 300, windowSeconds: 60 },
   event: { visitorLimit: 90, globalLimit: 1_500, windowSeconds: 60 },
 };
 
-async function consumeBucket(
+export async function consumeBucket(
   key: string,
   limit: number,
   windowSeconds: number,
@@ -51,20 +60,22 @@ async function consumeBucket(
   const now = new Date();
   const expiresAt = new Date(now.getTime() + windowSeconds * 1_000);
 
-  const bucket = await prisma.$transaction(async (transaction) => {
-    const reset = await transaction.publicRateLimit.updateMany({
-      where: { keyHash, expiresAt: { lte: now } },
-      data: { windowStartedAt: now, requestCount: 1, expiresAt },
-    });
-    if (reset.count > 0) return { requestCount: 1, expiresAt };
+  const bucket = await retryDatabaseWrite(() =>
+    prisma.$transaction(async (transaction) => {
+      const reset = await transaction.publicRateLimit.updateMany({
+        where: { keyHash, expiresAt: { lte: now } },
+        data: { windowStartedAt: now, requestCount: 1, expiresAt },
+      });
+      if (reset.count > 0) return { requestCount: 1, expiresAt };
 
-    return transaction.publicRateLimit.upsert({
-      where: { keyHash },
-      create: { keyHash, windowStartedAt: now, requestCount: 1, expiresAt },
-      update: { requestCount: { increment: 1 } },
-      select: { requestCount: true, expiresAt: true },
-    });
-  });
+      return transaction.publicRateLimit.upsert({
+        where: { keyHash },
+        create: { keyHash, windowStartedAt: now, requestCount: 1, expiresAt },
+        update: { requestCount: { increment: 1 } },
+        select: { requestCount: true, expiresAt: true },
+      });
+    }),
+  );
 
   if (bucket.requestCount > limit) {
     const retryAfterSeconds = Math.max(
@@ -86,6 +97,7 @@ export async function assertPublicRateLimit(
   identity: VisitorIdentity,
 ): Promise<void> {
   const policy = POLICIES[kind];
+  if (kind === "page") await consumeBucket("page:application", 6000, 60);
   await consumeBucket(
     `${kind}:visitor:${identity.tokenHash}`,
     policy.visitorLimit,
@@ -100,7 +112,11 @@ export async function assertPublicRateLimit(
 
 export function analyticsRequestShouldBeIgnored(request: NextRequest): boolean {
   const purpose = `${request.headers.get("purpose") ?? ""} ${request.headers.get("sec-purpose") ?? ""}`;
-  if (/prefetch|prerender/i.test(purpose) || request.headers.has("next-router-prefetch")) return true;
+  if (
+    /prefetch|prerender/i.test(purpose) ||
+    request.headers.has("next-router-prefetch")
+  )
+    return true;
   const userAgent = request.headers.get("user-agent") ?? "";
   return /bot\b|crawler|spider|slurp|preview|facebookexternalhit|whatsapp|telegrambot|headless/i.test(
     userAgent,
@@ -111,7 +127,8 @@ export function analyticsRequestMetadata(request: NextRequest): {
   userAgent: string | null;
   referrer: string | null;
 } {
-  const userAgent = request.headers.get("user-agent")?.trim().slice(0, 500) || null;
+  const userAgent =
+    request.headers.get("user-agent")?.trim().slice(0, 500) || null;
   const rawReferrer = request.headers.get("referer");
   let referrer: string | null = null;
   if (rawReferrer) {
@@ -126,4 +143,3 @@ export function analyticsRequestMetadata(request: NextRequest): {
   }
   return { userAgent, referrer };
 }
-

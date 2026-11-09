@@ -1,0 +1,35 @@
+name: Focused verification
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      database:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: ci-test-only
+        ports: ["3307:3306"]
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    env:
+      DATABASE_HOST: 127.0.0.1
+      DATABASE_PORT: 3307
+      DATABASE_USER: root
+      DATABASE_PASSWORD: ci-test-only
+      DATABASE_NAME: vcard_ci_development
+      DATABASE_URL: mysql://root:ci-test-only@127.0.0.1:3307/vcard_ci_development
+      APP_URL: http://localhost:3000
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npm run db:test:prepare
+      - run: npm run verify:targeted

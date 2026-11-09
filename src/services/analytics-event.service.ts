@@ -26,22 +26,26 @@ async function persistEvent(
   eventType: ActivityEventType,
   metadata: EventMetadata,
 ): Promise<boolean> {
-  const duplicateAfter = new Date(Date.now() - DEDUPE_WINDOWS_MS[eventType]);
-  const duplicate = await prisma.activityEvent.findFirst({
-    where: {
-      contactProfileId: profileId,
-      eventType,
-      visitorTokenHash: metadata.visitorTokenHash,
-      createdAt: { gte: duplicateAfter },
-    },
-    select: { id: true },
-  });
-  if (duplicate) return false;
-
   for (let attempt = 0; attempt < 6; attempt += 1) {
     try {
-      await prisma.$transaction([
-        prisma.activityEvent.create({
+      return await prisma.$transaction(async (transaction) => {
+        const now = new Date();
+        const keyHash = hashToken(
+          `event:${profileId}:${metadata.visitorTokenHash}:${eventType}`,
+        );
+        await transaction.eventDedupe.upsert({
+          where: { keyHash },
+          create: { keyHash, expiresAt: new Date(0) },
+          update: {},
+        });
+        const claimed = await transaction.eventDedupe.updateMany({
+          where: { keyHash, expiresAt: { lte: now } },
+          data: {
+            expiresAt: new Date(now.getTime() + DEDUPE_WINDOWS_MS[eventType]),
+          },
+        });
+        if (claimed.count !== 1) return false;
+        await transaction.activityEvent.create({
           data: {
             contactProfileId: profileId,
             eventType,
@@ -49,31 +53,25 @@ async function persistEvent(
             userAgent: metadata.userAgent,
             referrer: metadata.referrer,
           },
-        }),
-        ...(eventType === ActivityEventType.PROFILE_VIEW
-          ? [
-              prisma.contactProfile.update({
-                where: { id: profileId },
-                data: { viewCount: { increment: 1 } },
-              }),
-            ]
-          : []),
-        ...(eventType === ActivityEventType.VCARD_DOWNLOAD
-          ? [
-              prisma.contactProfile.update({
-                where: { id: profileId },
-                data: { vcardDownloadCount: { increment: 1 } },
-              }),
-            ]
-          : []),
-      ]);
-      return true;
+        });
+        if (eventType === ActivityEventType.PROFILE_VIEW)
+          await transaction.contactProfile.update({
+            where: { id: profileId },
+            data: { viewCount: { increment: 1 } },
+          });
+        if (eventType === ActivityEventType.VCARD_DOWNLOAD)
+          await transaction.contactProfile.update({
+            where: { id: profileId },
+            data: { vcardDownloadCount: { increment: 1 } },
+          });
+        return true;
+      });
     } catch (error) {
       const retryable =
         typeof error === "object" &&
         error !== null &&
         "code" in error &&
-        (error as { code?: string }).code === "P2034";
+        ["P2034", "P2002"].includes((error as { code?: string }).code ?? "");
       if (!retryable || attempt === 5) throw error;
       await new Promise((resolve) => setTimeout(resolve, 10 * 2 ** attempt));
     }
@@ -96,6 +94,9 @@ export async function recordClientEvent(
       id: true,
       showEmail: true,
       showPhone: true,
+      showWorkPhone: true,
+      showMobilePhone: true,
+      showWhatsapp: true,
       showSocialLinks: true,
       email: true,
       workPhone: true,
@@ -108,26 +109,46 @@ export async function recordClientEvent(
       },
     },
   });
-  if (!profile) throw new AppError(404, "PROFILE_NOT_FOUND", "Profil tidak ditemukan.");
+  if (!profile)
+    throw new AppError(404, "PROFILE_NOT_FOUND", "Profil tidak ditemukan.");
 
   const validTarget = (() => {
     switch (input.eventType) {
       case "PHONE_CLICK":
-        return profile.showPhone && Boolean(profile.mobilePhone || profile.workPhone);
+        return (
+          profile.showPhone &&
+          Boolean(
+            (profile.showMobilePhone && profile.mobilePhone) ||
+            (profile.showWorkPhone && profile.workPhone),
+          )
+        );
       case "WHATSAPP_CLICK":
-        return profile.showPhone && Boolean(profile.whatsappNumber);
+        return (
+          profile.showPhone &&
+          profile.showWhatsapp &&
+          Boolean(profile.whatsappNumber)
+        );
       case "EMAIL_CLICK":
         return profile.showEmail && Boolean(profile.email);
       case "SOCIAL_CLICK": {
-        const target = profile.socialLinks.find((link) => hashToken(link.id) === input.targetId);
-        return profile.showSocialLinks && Boolean(target?.isActive && safeHttpUrl(target.url));
+        const target = profile.socialLinks.find(
+          (link) => hashToken(link.id) === input.targetId,
+        );
+        return (
+          profile.showSocialLinks &&
+          Boolean(target?.isActive && safeHttpUrl(target.url))
+        );
       }
       default:
         return true;
     }
   })();
   if (!validTarget) {
-    throw new AppError(422, "EVENT_TARGET_INVALID", "Target aktivitas tidak tersedia.");
+    throw new AppError(
+      422,
+      "EVENT_TARGET_INVALID",
+      "Target aktivitas tidak tersedia.",
+    );
   }
 
   return persistEvent(profile.id, ActivityEventType[input.eventType], metadata);

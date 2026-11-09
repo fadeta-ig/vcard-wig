@@ -1,0 +1,19 @@
+{
+  "environment": "isolated-local-test-database",
+  "checks": [
+    {
+      "route": "/api/health/live",
+      "status": 200,
+      "body": {
+        "status": "ok"
+      }
+    },
+    {
+      "route": "/api/health/ready",
+      "status": 200,
+      "body": {
+        "status": "ready"
+      }
+    }
+  ]
+}

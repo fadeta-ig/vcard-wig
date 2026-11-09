@@ -14,7 +14,9 @@ function context(pathSegments: string[]) {
 }
 
 beforeEach(async () => {
-  uploadDirectory = await mkdtemp(path.join(tmpdir(), "vcard-runtime-uploads-"));
+  uploadDirectory = await mkdtemp(
+    path.join(tmpdir(), "vcard-runtime-uploads-"),
+  );
   process.env.UPLOAD_DIR = uploadDirectory;
   resetEnvironmentForTests();
 });
@@ -28,7 +30,11 @@ afterEach(async () => {
 
 describe("runtime upload route", () => {
   it("serves a file created after application startup with immutable caching", async () => {
-    const segments = ["companies", "company-1", "logo-12345678-1234-1234-1234-123456789abc.webp"];
+    const segments = [
+      "companies",
+      "company-1",
+      "logo-12345678-1234-1234-1234-123456789abc.webp",
+    ];
     const directory = path.join(uploadDirectory, ...segments.slice(0, -1));
     const contents = Buffer.from([0x52, 0x49, 0x46, 0x46]);
     await mkdir(directory, { recursive: true });
@@ -38,12 +44,14 @@ describe("runtime upload route", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("Content-Type")).toBe("image/webp");
-    expect(response.headers.get("Cache-Control")).toBe("public, max-age=31536000, immutable");
+    expect(response.headers.get("Cache-Control")).toBe(
+      "public, max-age=31536000, immutable",
+    );
     expect(Buffer.from(await response.arrayBuffer())).toEqual(contents);
   });
 
-  it("supports HEAD without returning the file body", async () => {
-    const segments = ["profiles", "company-1", "profile-1", "thumb-file.webp"];
+  it("supports HEAD for public company assets without returning the file body", async () => {
+    const segments = ["companies", "company-1", "thumb-file.webp"];
     const filePath = path.join(uploadDirectory, ...segments);
     await mkdir(path.dirname(filePath), { recursive: true });
     await writeFile(filePath, Buffer.from([1, 2, 3]));
@@ -62,9 +70,13 @@ describe("runtime upload route", () => {
       GET(request, context(["companies", "company-1", "logo.svg"])),
     ]);
 
-    expect(responses.map((response) => response.status)).toEqual([404, 404, 404]);
+    expect(responses.map((response) => response.status)).toEqual([
+      404, 404, 404,
+    ]);
     for (const response of responses) {
-      expect(response.headers.get("Cache-Control")).toBe("private, no-store, max-age=0");
+      expect(response.headers.get("Cache-Control")).toBe(
+        "private, no-store, max-age=0",
+      );
     }
   });
 });

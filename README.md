@@ -35,14 +35,20 @@ Completed:
 - Per-company dashboard and analytics with date/event/profile filters, CSV export, top profiles, recent profiles, and a 14-day trend; Super Admin global scope is explicit and separate.
 - Super Admin-only read-only audit log with search, filters, pagination, recursive sensitive-value redaction, and bilingual UI.
 - Centralized public rate limits, event/counter transactions with deadlock retry, retention cleanup, CSP/HSTS/security headers, and checksum-verified database backup/restore scripts.
+- Versioned profile updates, company-context guards, save-before-publish, and unsaved-change navigation protection.
+- Private, authorization-checked profile photos; per-phone visibility and per-profile indexing controls.
+- Archived-profile permanent deletion with typed confirmation, relational cleanup, durable photo cleanup, and reserved historical URLs.
+- Optional encrypted TOTP MFA with single-use recovery codes, responsive administration, and shared public/preview rendering.
+
+The 9 November 2026 remediation and its verification boundaries are recorded in [the implementation report](docs/remediation-2026-11-09/IMPLEMENTASI-PERBAIKAN-VCARD.md). Follow [the release guide](docs/remediation-2026-11-09/PANDUAN-RILIS.md) when upgrading an existing installation, particularly its private-photo migration steps.
 
 ## Runtime versions
 
 The lockfile currently resolves:
 
 - Node.js 24.11.1 in the development environment.
-- Next.js 16.2.10 and React 19.2.7.
-- Prisma ORM/Client 7.8.0 with the MariaDB driver adapter.
+- Next.js 16.4.5 and React 19.3.1.
+- Prisma ORM/Client 7.10.1 with the MariaDB driver adapter.
 - TypeScript 6.0.3.
 - MariaDB 10.4.32 at `127.0.0.1:3307` for local development.
 
@@ -112,6 +118,11 @@ Steps:
 | `SESSION_TTL_HOURS` | Fixed session lifetime, default 8 hours. |
 | `ANALYTICS_RETENTION_DAYS` | Event retention, default 365 days. |
 | `EXPIRED_SESSION_RETENTION_DAYS` | Grace period after session expiry, default 30 days. |
+| `UPLOAD_DIR` | Public company-asset storage; defaults to `public/uploads`. |
+| `PRIVATE_UPLOAD_DIR` | Private profile-photo storage; defaults to `storage/private/profile-photos`. Keep outside the web root. |
+| `MFA_ENCRYPTION_KEY` | Optional stable 64-character hex encryption key, required before account MFA enrollment. Protect and back up separately. |
+| `PRIVACY_CONTACT_EMAIL` | Optional contact for profile/privacy corrections. |
+| `TEST_DATABASE_NAME`, `TEST_DATABASE_USER`, `TEST_DATABASE_PASSWORD` | Isolated local test database settings; preparation rejects non-loopback and non-test targets. |
 | `BACKUP_DIR`, `MYSQL_DUMP_BIN`, `MYSQL_CLIENT_BIN` | Optional backup/restore tool paths and output directory. |
 | `SEED_ADMIN_*` | Initial Super Admin seed values. The real password is never stored in `.env.example`. |
 
@@ -124,12 +135,13 @@ Database and canonical-origin values are runtime-bound: build the artifact once,
 ```powershell
 npm.cmd run lint
 npm.cmd run typecheck
-npm.cmd test
+npm.cmd run db:test:prepare
+npm.cmd run test:critical
 npm.cmd run build
-npm.cmd run verify
+npm.cmd run verify:targeted
 ```
 
-Integration tests use the isolated `vcard_wig_test` database and run test files serially to prevent shared-database races. Create it and run `npm.cmd run db:deploy` against its URL before the first test run.
+Integration tests use the isolated `vcard_wig_test` database and run test files serially to prevent shared-database races. `db:test:prepare` creates/migrates only a guarded local test target. Tests may clear that test database; never use it for application data. The November remediation uses explicitly selected tests, not the full suite. The optional `npm test` and `npm run verify` commands still run the full suite when deliberately requested. Production builds default to Webpack; `build:turbo` remains an optional alternative.
 
 ## Database commands
 
@@ -142,7 +154,7 @@ Integration tests use the isolated `vcard_wig_test` database and run test files 
 | `npm.cmd run db:seed` | Explicitly seed the Super Admin. |
 | `npm.cmd run db:backup` | Create a consistent SQL backup and SHA-256 checksum. |
 | `npm.cmd run db:restore -- <file.sql> <clean_database>` | Checksum-verify and restore into a separate database. |
-| `npm.cmd run maintenance:cleanup` | Apply analytics/session/throttle retention. |
+| `npm.cmd run maintenance:cleanup` | Apply retention, clear expired MFA enrollment/dedupe, and retry pending photo deletions. |
 
 Never use `prisma migrate reset` against shared or production data.
 
@@ -156,7 +168,10 @@ Never use `prisma migrate reset` against shared or production data.
 - Company assets accept only JPG/PNG/WebP up to 2 MB, validate decoded signatures and pixel limits, and are re-encoded by Sharp under randomized filenames.
 - Profile photos additionally enforce maximum dimensions of 2000×2000, generate 600×600 and 160×160 WebP outputs, and clean replaced files after the database transaction succeeds.
 - Profile create/update derives `companyId` from the authorized session context. Profile IDs and company cookies never act as authorization evidence.
-- Archived profiles are soft-deleted from the primary list and can only return through the explicit Archived → Draft transition.
+- Archived profiles leave the primary list, can return through Archived → Draft, or can be permanently deleted after explicit confirmation. URLs remain reserved after permanent deletion and after a profile has ever been published.
+- Content, status, photo, and social-link mutations verify the selected company and an atomic profile version. Stale editors receive a conflict response.
+- Profile photos are outside the public web root and are served with authorization checks and no-store caching. Existing public files and historical caches require the release migration procedure.
+- MFA is optional and requires an operator-managed encryption key and account-owner enrollment. Recovery codes are hashed and single use.
 - Public pages query by globally unique slug but return a dedicated DTO without tenant IDs, creator data, or fields disabled by profile visibility. Draft/Archived and inactive companies return 404; Inactive profiles expose branding only.
 - Public external URLs are revalidated at read time and only credential-free HTTP(S), international `tel:`, normalized `wa.me`, and safe `mailto:` actions are emitted.
 - Admin QR/vCard endpoints require an authorized session and company scope. Public vCard is available only for ACTIVE profiles in active companies.
@@ -172,9 +187,9 @@ Never use `prisma migrate reset` against shared or production data.
 - Build and run behind an HTTPS reverse proxy such as nginx; do not expose `next start` directly to the internet.
 - Use a process manager or container restart policy and configure health monitoring.
 - Use an application-specific database account. Run `npm run db:deploy` as a controlled release step.
-- Phase 2 local uploads are suitable for Windows development and a single persistent instance. Before production, connect the storage adapter to object storage or confirm persistent disk, file backup, and single-instance deployment.
+- Configure persistent company assets and private profile storage. Before horizontal scaling, provide shared storage with equivalent authorization and cleanup semantics; this release has not been verified on multiple instances.
 - Back up the database before every migration and verify restore on staging. Follow [docs/PHASE_6_OPERATIONS.md](docs/PHASE_6_OPERATIONS.md).
 
 ## Known upstream advisories
 
-As of 15 July 2026, `npm audit` reports moderate advisories in transitive dependencies of the current Next.js/PostCSS and Prisma tooling releases, with no upstream fix available in the installed stable versions. The application does not stringify user-controlled CSS (colors are strict `#RRGGBB`) and does not expose Prisma development servers. Re-run `npm audit` during each dependency update and upgrade as soon as fixed stable releases are available.
+Dependency evidence from 9 November 2026 is stored in [the final npm audit artifact](docs/remediation-2026-11-09/dependency-audit-final.json). Advisory results are a point-in-time registry check and must be refreshed during releases; they do not establish that the application is vulnerability-free. Earlier Phase 6 reports describe their July snapshot and are not the current dependency assessment.

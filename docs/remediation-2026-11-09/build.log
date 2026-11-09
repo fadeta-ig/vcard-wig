@@ -1,0 +1,76 @@
+
+> vcard-wig@0.1.0 build
+> next build --webpack
+
+▲ Next.js 16.4.5 (webpack)
+- Environments: .env
+✓ Running next.config.ts took 67ms
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 20.6s
+  Running TypeScript ...
+  Finished TypeScript in 15.9s ...
+  Collecting page data using 7 workers ...
+  Generating static pages using 7 workers (0/26) ...
+  Generating static pages using 7 workers (6/26) 
+  Generating static pages using 7 workers (12/26) 
+  Generating static pages using 7 workers (19/26) 
+✓ Generating static pages using 7 workers (26/26) in 3.2s
+  Finalizing page optimization ...
+  Collecting build traces ...
+
+Route (app)
+┌ ƒ /
+├ ƒ /_not-found
+├ ƒ /admin
+├ ƒ /admin/analytics
+├ ƒ /admin/audit-logs
+├ ƒ /admin/change-password
+├ ƒ /admin/companies
+├ ƒ /admin/login
+├ ƒ /admin/profiles
+├ ƒ /admin/profiles/[id]
+├ ƒ /admin/profiles/[id]/edit
+├ ƒ /admin/profiles/[id]/qr
+├ ƒ /admin/profiles/new
+├ ƒ /admin/settings/admins
+├ ƒ /admin/settings/company
+├ ƒ /admin/settings/security
+├ ƒ /api/admin/admins
+├ ƒ /api/admin/admins/[id]
+├ ƒ /api/admin/admins/[id]/reset-password
+├ ƒ /api/admin/analytics/export
+├ ƒ /api/admin/companies
+├ ƒ /api/admin/companies/[id]
+├ ƒ /api/admin/companies/[id]/assets
+├ ƒ /api/admin/context/company
+├ ƒ /api/admin/profiles
+├ ƒ /api/admin/profiles/[id]
+├ ƒ /api/admin/profiles/[id]/archive
+├ ƒ /api/admin/profiles/[id]/permanent
+├ ƒ /api/admin/profiles/[id]/photo
+├ ƒ /api/admin/profiles/[id]/publish
+├ ƒ /api/admin/profiles/[id]/qr
+├ ƒ /api/admin/profiles/[id]/social-links
+├ ƒ /api/admin/profiles/[id]/status
+├ ƒ /api/admin/profiles/[id]/vcard
+├ ƒ /api/admin/social-links/[id]
+├ ƒ /api/auth/change-password
+├ ƒ /api/auth/login
+├ ƒ /api/auth/logout
+├ ƒ /api/auth/mfa
+├ ƒ /api/auth/session
+├ ƒ /api/health/live
+├ ƒ /api/health/ready
+├ ƒ /api/public/contacts/[slug]
+├ ƒ /api/public/contacts/[slug]/events
+├ ƒ /api/public/contacts/[slug]/vcard
+├ ƒ /c/[slug]
+├ ƒ /privacy
+└ ƒ /uploads/[...path]
+
+
+ƒ Proxy (Middleware)
+
+ƒ  (Dynamic)  server-rendered on demand
+

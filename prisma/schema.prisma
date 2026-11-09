@@ -38,6 +38,12 @@ model User {
   role               UserRole                @default(ADMIN)
   isActive           Boolean                 @default(true)
   mustChangePassword Boolean                 @default(false)
+  mfaSecretEncrypted String?                  @db.Text
+  mfaPendingSecret   String?                  @db.Text
+  mfaPendingSession  String?                  @db.VarChar(191)
+  mfaPendingExpires  DateTime?
+  mfaLastCounter     BigInt?
+  recoveryCodes      MfaRecoveryCode[]
   lastLoginAt        DateTime?
   memberships        UserCompanyMembership[]
   profilesCreated    ContactProfile[]        @relation("ProfileCreator")
@@ -48,6 +54,15 @@ model User {
 
   @@index([role, isActive])
   @@index([name])
+}
+
+model MfaRecoveryCode {
+  id       String @id @default(cuid())
+  userId   String
+  codeHash String @unique @db.Char(64)
+  user     User   @relation(fields:[userId],references:[id],onDelete:Cascade)
+
+  @@index([userId])
 }
 
 model Company {
@@ -144,9 +159,15 @@ model ContactProfile {
   profilePhoto       String?         @db.VarChar(500)
   profileThumbnail   String?         @db.VarChar(500)
   status             ProfileStatus   @default(DRAFT)
+  version            Int             @default(1)
+  firstPublishedAt   DateTime?
+  allowIndexing      Boolean         @default(false)
   showPhoto          Boolean         @default(true)
   showEmail          Boolean         @default(true)
   showPhone          Boolean         @default(true)
+  showWorkPhone      Boolean         @default(true)
+  showMobilePhone    Boolean         @default(true)
+  showWhatsapp       Boolean         @default(true)
   showAddress        Boolean         @default(true)
   showSocialLinks    Boolean         @default(true)
   sectionOrder       Json?
@@ -164,6 +185,31 @@ model ContactProfile {
   @@index([companyId, displayName])
   @@index([companyId, companyName])
   @@index([status])
+}
+
+// A hash-only tombstone keeps printed QR URLs from being reassigned after deletion.
+// Intentionally no FK: the reservation survives permanent deletion of a profile.
+model ProfileSlugReservation {
+  slugHash  String   @id @db.Char(64)
+  profileId String?  @db.VarChar(191)
+  createdAt DateTime @default(now())
+
+  @@index([profileId])
+}
+
+// Serialized per-visitor event windows; kept separate from retained event rows.
+model EventDedupe {
+  keyHash   String   @id @db.Char(64)
+  expiresAt DateTime
+
+  @@index([expiresAt])
+}
+
+model AssetDeletionTask {
+  id         String   @id @default(cuid())
+  publicPath String   @unique @db.VarChar(500)
+  attempts   Int      @default(0)
+  createdAt  DateTime @default(now())
 }
 
 model SocialLink {

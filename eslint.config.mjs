@@ -10,6 +10,8 @@ export default defineConfig([
     "out/**",
     "build/**",
     "coverage/**",
+    ".tmp/**",
+    "storage/**",
     "src/generated/**",
     "next-env.d.ts",
   ]),

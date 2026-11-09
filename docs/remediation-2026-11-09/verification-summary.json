@@ -1,0 +1,122 @@
+{
+  "verifiedAt": "2026-11-09T09:53:00.179Z",
+  "confidence": "VERIFIED",
+  "scope": "Local workspace remediation; no production deployment",
+  "fullTestSuiteRun": false,
+  "checks": {
+    "lint": {
+      "status": "passed",
+      "warnings": 0,
+      "evidence": "lint.log"
+    },
+    "typecheck": {
+      "status": "passed",
+      "evidence": "typecheck.log",
+      "finalSourceAlsoCheckedByNextBuild": true
+    },
+    "build": {
+      "status": "passed",
+      "engine": "Next.js Webpack",
+      "evidence": "build.log"
+    },
+    "criticalTests": {
+      "status": "passed",
+      "total": 33,
+      "passed": 33,
+      "failed": 0,
+      "evidence": "critical-tests.json"
+    },
+    "qrVcardAndAssetTests": {
+      "status": "passed",
+      "total": 8,
+      "passed": 8,
+      "failed": 0,
+      "evidence": "qr-vcard-tests.json"
+    },
+    "dependencyAudit": {
+      "all": {
+        "info": 0,
+        "low": 0,
+        "moderate": 0,
+        "high": 0,
+        "critical": 0,
+        "total": 0
+      },
+      "production": {
+        "info": 0,
+        "low": 0,
+        "moderate": 0,
+        "high": 0,
+        "critical": 0,
+        "total": 0
+      },
+      "evidence": [
+        "dependency-audit-final.json",
+        "dependency-audit-production.json"
+      ]
+    },
+    "migrationUpgrade": {
+      "status": "passed",
+      "database": "vcard_migration_1794215529565_test",
+      "legacyProfilePreserved": true,
+      "version": 1,
+      "firstPublicationPreserved": true,
+      "existingIndexingPreserved": true,
+      "currentAndHistoricalSlugReservations": 2,
+      "sourceDatabaseChanged": false,
+      "evidence": "migration-drill.json"
+    },
+    "runtimeHealth": {
+      "environment": "isolated-local-test-database",
+      "checks": [
+        {
+          "route": "/api/health/live",
+          "status": 200,
+          "body": {
+            "status": "ok"
+          }
+        },
+        {
+          "route": "/api/health/ready",
+          "status": 200,
+          "body": {
+            "status": "ready"
+          }
+        }
+      ],
+      "evidence": "runtime-health.json"
+    },
+    "browser": {
+      "status": "completed_with_documented_limits",
+      "evidence": "browser-verification.json"
+    },
+    "diffWhitespace": {
+      "status": "passed",
+      "evidence": "diff-check.log"
+    }
+  },
+  "archivedPermanentDeletion": {
+    "implemented": true,
+    "requiresArchivedStatus": true,
+    "typedSlugConfirmation": true,
+    "authorizationCsrfCompanyVersionChecks": true,
+    "transactionalRelatedDataRemoval": true,
+    "durablePhotoCleanup": true,
+    "historicalSlugHashReserved": true
+  },
+  "productionDataModified": false,
+  "requiredReleaseSteps": [
+    "Verified database and file backups",
+    "Apply three additive migrations",
+    "Migrate legacy profile photos to private storage and invalidate historical image caches",
+    "Provide stable MFA encryption key and account-owner enrollment if MFA will be used",
+    "Run deployment checks and physical-device UAT from release guide"
+  ],
+  "limitations": [
+    "No full suite",
+    "No production or load-test verification",
+    "No GitHub CI execution",
+    "No physical-device UAT or WCAG certification",
+    "Browser automation could not verify cancellation of the native unsaved-navigation prompt; Back/Forward requires UAT"
+  ]
+}

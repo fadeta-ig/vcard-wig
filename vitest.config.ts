@@ -15,13 +15,18 @@ export default defineConfig({
     env: {
       DATABASE_HOST: "127.0.0.1",
       DATABASE_PORT: "3307",
-      DATABASE_USER: "root",
-      DATABASE_PASSWORD: "",
+      DATABASE_USER:
+        process.env.TEST_DATABASE_USER ?? process.env.DATABASE_USER ?? "root",
+      DATABASE_PASSWORD:
+        process.env.TEST_DATABASE_PASSWORD ??
+        process.env.DATABASE_PASSWORD ??
+        "",
       DATABASE_NAME: "vcard_wig_test",
       DATABASE_CONNECTION_LIMIT: "2",
       APP_URL: "http://localhost:3000",
       NEXT_PUBLIC_APP_URL: "http://localhost:3000",
       SESSION_TTL_HOURS: "8",
+      PRIVATE_UPLOAD_DIR: "./.tmp/test-profile-photos",
     },
     include: ["src/**/*.test.{ts,tsx}", "tests/**/*.test.ts"],
     coverage: {

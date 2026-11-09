@@ -5,6 +5,15 @@ import { hashPassword } from "@/lib/security/password";
 import { getPublicProfileBySlug } from "@/services/public-profile.service";
 
 async function cleanDatabase() {
+  if (
+    process.env.DATABASE_NAME !== "vcard_wig_test" ||
+    process.env.DATABASE_HOST !== "127.0.0.1"
+  )
+    throw new Error("Refusing cleanup outside isolated test database.");
+  await prisma.mfaRecoveryCode.deleteMany();
+  await prisma.eventDedupe.deleteMany();
+  await prisma.profileSlugReservation.deleteMany();
+  await prisma.assetDeletionTask.deleteMany();
   await prisma.publicRateLimit.deleteMany();
   await prisma.activityEvent.deleteMany();
   await prisma.socialLink.deleteMany();
@@ -107,8 +116,12 @@ describe.sequential("public profile phase 4 integration", () => {
   beforeEach(cleanDatabase);
 
   it("does not expose Draft or Archived profiles and gives Inactive a PII-free response", async () => {
-    const { profile } = await createFixture("private-profile", { status: ProfileStatus.DRAFT });
-    expect(await getPublicProfileBySlug(profile.slug)).toEqual({ kind: "not_found" });
+    const { profile } = await createFixture("private-profile", {
+      status: ProfileStatus.DRAFT,
+    });
+    expect(await getPublicProfileBySlug(profile.slug)).toEqual({
+      kind: "not_found",
+    });
 
     await prisma.contactProfile.update({
       where: { id: profile.id },
@@ -124,7 +137,9 @@ describe.sequential("public profile phase 4 integration", () => {
       where: { id: profile.id },
       data: { status: ProfileStatus.ARCHIVED },
     });
-    expect(await getPublicProfileBySlug(profile.slug)).toEqual({ kind: "not_found" });
+    expect(await getPublicProfileBySlug(profile.slug)).toEqual({
+      kind: "not_found",
+    });
   });
 
   it("removes every hidden field from the server DTO instead of only hiding it with CSS", async () => {
@@ -170,7 +185,12 @@ describe.sequential("public profile phase 4 integration", () => {
     const result = await getPublicProfileBySlug(profile.slug);
     expect(result.kind).toBe("active");
     if (result.kind !== "active") throw new Error("Expected active profile");
-    expect(result.profile.sectionOrder).toEqual(["BIO", "CONTACT", "SOCIAL", "ADDRESS"]);
+    expect(result.profile.sectionOrder).toEqual([
+      "BIO",
+      "CONTACT",
+      "SOCIAL",
+      "ADDRESS",
+    ]);
     expect(result.profile.socialLinks).toEqual([
       {
         trackingId: expect.any(String),
@@ -180,27 +200,50 @@ describe.sequential("public profile phase 4 integration", () => {
         href: "https://www.linkedin.com/in/jane-doe",
       },
     ]);
-    expect(result.profile.contact.whatsapp?.href).toBe("https://wa.me/6281234567890");
-    expect(result.profile.contact.email?.href).toBe("mailto:hidden@example.com");
+    expect(result.profile.contact.whatsapp?.href).toBe(
+      "https://wa.me/6281234567890",
+    );
+    expect(result.profile.contact.email?.href).toBe(
+      "mailto:hidden@example.com",
+    );
     expect(result.profile.formattedName).toBe("Dr. Jane Secret Doe, Ph.D.");
   });
 
   it("keeps company branding isolated and hides profiles belonging to inactive companies", async () => {
-    const first = await createFixture("company-one-profile", { primaryColor: "#112233" });
-    const second = await createFixture("company-two-profile", { primaryColor: "#AABBCC" });
+    const first = await createFixture("company-one-profile", {
+      primaryColor: "#112233",
+    });
+    const second = await createFixture("company-two-profile", {
+      primaryColor: "#AABBCC",
+    });
     const firstResult = await getPublicProfileBySlug(first.profile.slug);
     const secondResult = await getPublicProfileBySlug(second.profile.slug);
-    expect(firstResult.kind === "active" && firstResult.profile.brand.primaryColor).toBe("#112233");
-    expect(secondResult.kind === "active" && secondResult.profile.brand.primaryColor).toBe("#AABBCC");
+    expect(
+      firstResult.kind === "active" && firstResult.profile.brand.primaryColor,
+    ).toBe("#112233");
+    expect(
+      secondResult.kind === "active" && secondResult.profile.brand.primaryColor,
+    ).toBe("#AABBCC");
 
-    await prisma.company.update({ where: { id: first.company.id }, data: { isActive: false } });
-    expect(await getPublicProfileBySlug(first.profile.slug)).toEqual({ kind: "not_found" });
-    expect((await getPublicProfileBySlug(second.profile.slug)).kind).toBe("active");
+    await prisma.company.update({
+      where: { id: first.company.id },
+      data: { isActive: false },
+    });
+    expect(await getPublicProfileBySlug(first.profile.slug)).toEqual({
+      kind: "not_found",
+    });
+    expect((await getPublicProfileBySlug(second.profile.slug)).kind).toBe(
+      "active",
+    );
   });
 
   it("rejects malformed slugs without returning profile data", async () => {
     await createFixture("valid-profile");
-    expect(await getPublicProfileBySlug("../valid-profile")).toEqual({ kind: "not_found" });
-    expect(await getPublicProfileBySlug("VALID-PROFILE")).toEqual({ kind: "not_found" });
+    expect(await getPublicProfileBySlug("../valid-profile")).toEqual({
+      kind: "not_found",
+    });
+    expect(await getPublicProfileBySlug("VALID-PROFILE")).toEqual({
+      kind: "not_found",
+    });
   });
 });

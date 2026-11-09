@@ -32,8 +32,12 @@ const optionalHttpUrl = z
   .refine((value) => {
     if (!value) return true;
     try {
-      const protocol = new URL(value).protocol;
-      return protocol === "https:" || protocol === "http:";
+      const parsed = new URL(value);
+      return (
+        !parsed.username &&
+        !parsed.password &&
+        ["https:", "http:"].includes(parsed.protocol)
+      );
     } catch {
       return false;
     }
@@ -46,7 +50,10 @@ export const usernameSchema = z
   .toLowerCase()
   .min(3)
   .max(64)
-  .regex(/^[a-z0-9._-]+$/, "Username hanya boleh berisi huruf kecil, angka, titik, underscore, atau tanda hubung.");
+  .regex(
+    /^[a-z0-9._-]+$/,
+    "Username hanya boleh berisi huruf kecil, angka, titik, underscore, atau tanda hubung.",
+  );
 
 export const strongPasswordSchema = z
   .string()
@@ -55,8 +62,14 @@ export const strongPasswordSchema = z
 
 export const loginSchema = z
   .object({
-    identifier: z.string().trim().min(1).max(191).transform((value) => value.toLowerCase()),
+    identifier: z
+      .string()
+      .trim()
+      .min(1)
+      .max(191)
+      .transform((value) => value.toLowerCase()),
     password: z.string().min(1).max(256),
+    mfaCode: z.string().trim().min(6).max(64).optional(),
   })
   .strict();
 
@@ -76,7 +89,10 @@ export const changePasswordSchema = z
     message: "Password baru harus berbeda dari password saat ini.",
   });
 
-export const hexColorSchema = z.string().regex(/^#[0-9A-F]{6}$/i, "Gunakan format warna #RRGGBB.").transform((value) => value.toUpperCase());
+export const hexColorSchema = z
+  .string()
+  .regex(/^#[0-9A-F]{6}$/i, "Gunakan format warna #RRGGBB.")
+  .transform((value) => value.toUpperCase());
 
 export const companySlugSchema = z
   .string()
@@ -84,7 +100,10 @@ export const companySlugSchema = z
   .toLowerCase()
   .min(2)
   .max(80)
-  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Slug hanya boleh berisi huruf kecil, angka, dan tanda hubung.");
+  .regex(
+    /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
+    "Slug hanya boleh berisi huruf kecil, angka, dan tanda hubung.",
+  );
 
 const companyFields = {
   name: z.string().trim().min(2).max(120),
@@ -111,7 +130,10 @@ export const companyUpdateSchema = z
   .object(companyFields)
   .partial()
   .strict()
-  .refine((value) => Object.keys(value).length > 0, "Minimal satu field harus diubah.");
+  .refine(
+    (value) => Object.keys(value).length > 0,
+    "Minimal satu field harus diubah.",
+  );
 
 const companyIdSchema = z.string().min(20).max(40);
 
@@ -119,27 +141,40 @@ export const adminCreateSchema = z
   .object({
     username: usernameSchema,
     name: z.string().trim().min(2).max(100),
-    email: z.email().max(191).transform((value) => value.trim().toLowerCase()),
+    email: z
+      .email()
+      .max(191)
+      .transform((value) => value.trim().toLowerCase()),
     password: strongPasswordSchema,
     role: z.enum(["SUPER_ADMIN", "ADMIN"]).default("ADMIN"),
     companyIds: z.array(companyIdSchema).max(100).default([]),
   })
   .strict()
-  .refine((value) => value.role === "SUPER_ADMIN" || value.companyIds.length > 0, {
-    path: ["companyIds"],
-    message: "Admin harus ditugaskan minimal ke satu perusahaan.",
-  });
+  .refine(
+    (value) => value.role === "SUPER_ADMIN" || value.companyIds.length > 0,
+    {
+      path: ["companyIds"],
+      message: "Admin harus ditugaskan minimal ke satu perusahaan.",
+    },
+  );
 
 export const adminUpdateSchema = z
   .object({
     name: z.string().trim().min(2).max(100).optional(),
-    email: z.email().max(191).transform((value) => value.trim().toLowerCase()).optional(),
+    email: z
+      .email()
+      .max(191)
+      .transform((value) => value.trim().toLowerCase())
+      .optional(),
     role: z.enum(["SUPER_ADMIN", "ADMIN"]).optional(),
     isActive: z.boolean().optional(),
     companyIds: z.array(companyIdSchema).max(100).optional(),
   })
   .strict()
-  .refine((value) => Object.keys(value).length > 0, "Minimal satu field harus diubah.");
+  .refine(
+    (value) => Object.keys(value).length > 0,
+    "Minimal satu field harus diubah.",
+  );
 
 export const adminResetPasswordSchema = z
   .object({
@@ -152,7 +187,9 @@ export const adminResetPasswordSchema = z
     message: "Konfirmasi password tidak cocok.",
   });
 
-export const companyContextSchema = z.object({ companyId: companyIdSchema }).strict();
+export const companyContextSchema = z
+  .object({ companyId: companyIdSchema })
+  .strict();
 
 const normalizedPhone = z
   .string()
@@ -162,9 +199,7 @@ const normalizedPhone = z
   .nullable()
   .transform((value, context) => {
     if (!value) return null;
-    const normalized = value
-      .replace(/^00/, "+")
-      .replace(/[\s().-]/g, "");
+    const normalized = value.replace(/^00/, "+").replace(/[\s().-]/g, "");
     if (!/^\+[1-9]\d{6,14}$/.test(normalized)) {
       context.addIssue({
         code: "custom",
@@ -181,8 +216,14 @@ export const profileSlugSchema = z
   .toLowerCase()
   .min(2, "Slug minimal 2 karakter.")
   .max(100)
-  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Slug hanya boleh berisi huruf kecil, angka, dan tanda hubung.")
-  .refine((value) => !RESERVED_PROFILE_SLUGS.has(value), "Slug ini digunakan oleh sistem.");
+  .regex(
+    /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
+    "Slug hanya boleh berisi huruf kecil, angka, dan tanda hubung.",
+  )
+  .refine(
+    (value) => !RESERVED_PROFILE_SLUGS.has(value),
+    "Slug ini digunakan oleh sistem.",
+  );
 
 const optionalProfileSlug = z
   .union([z.literal(""), profileSlugSchema])
@@ -201,8 +242,12 @@ const socialLinkFields = {
     .max(500)
     .refine((value) => {
       try {
-        const protocol = new URL(value).protocol;
-        return protocol === "https:" || protocol === "http:";
+        const parsed = new URL(value);
+        return (
+          !parsed.username &&
+          !parsed.password &&
+          ["https:", "http:"].includes(parsed.protocol)
+        );
       } catch {
         return false;
       }
@@ -223,12 +268,18 @@ export const socialLinkUpdateSchema = z
   .partial()
   .extend({ sortOrder: z.number().int().min(0).max(99).optional() })
   .strict()
-  .refine((value) => Object.keys(value).length > 0, "Minimal satu field harus diubah.");
+  .refine(
+    (value) => Object.keys(value).length > 0,
+    "Minimal satu field harus diubah.",
+  );
 
 const sectionOrderSchema = z
   .array(z.enum(PROFILE_SECTIONS))
   .length(PROFILE_SECTIONS.length)
-  .refine((value) => new Set(value).size === PROFILE_SECTIONS.length, "Setiap bagian harus muncul tepat satu kali.");
+  .refine(
+    (value) => new Set(value).size === PROFILE_SECTIONS.length,
+    "Setiap bagian harus muncul tepat satu kali.",
+  );
 
 const profileFields = {
   slug: optionalProfileSlug,
@@ -239,7 +290,11 @@ const profileFields = {
   honorificSuffix: optionalTrimmedString(30),
   jobTitle: z.string().trim().min(1, "Jabatan wajib diisi.").max(120),
   department: optionalTrimmedString(120),
-  companyName: z.string().trim().min(2, "Nama perusahaan wajib diisi.").max(160),
+  companyName: z
+    .string()
+    .trim()
+    .min(2, "Nama perusahaan wajib diisi.")
+    .max(160),
   email: z
     .string()
     .trim()
@@ -259,10 +314,17 @@ const profileFields = {
   showPhoto: z.boolean().default(true),
   showEmail: z.boolean().default(true),
   showPhone: z.boolean().default(true),
+  showWorkPhone: z.boolean().default(true),
+  showMobilePhone: z.boolean().default(true),
+  showWhatsapp: z.boolean().default(true),
+  allowIndexing: z.boolean().default(false),
   showAddress: z.boolean().default(true),
   showSocialLinks: z.boolean().default(true),
   sectionOrder: sectionOrderSchema.default([...PROFILE_SECTIONS]),
-  socialLinks: z.array(socialLinkCreateSchema).max(20, "Maksimal 20 media sosial.").default([]),
+  socialLinks: z
+    .array(socialLinkCreateSchema)
+    .max(20, "Maksimal 20 media sosial.")
+    .default([]),
 };
 
 export const profileCreateSchema = z.object(profileFields).strict();
@@ -272,17 +334,26 @@ const profileUpdateFields = {
   showPhoto: z.boolean(),
   showEmail: z.boolean(),
   showPhone: z.boolean(),
+  showWorkPhone: z.boolean(),
+  showMobilePhone: z.boolean(),
+  showWhatsapp: z.boolean(),
+  allowIndexing: z.boolean(),
   showAddress: z.boolean(),
   showSocialLinks: z.boolean(),
   sectionOrder: sectionOrderSchema,
-  socialLinks: z.array(socialLinkCreateSchema).max(20, "Maksimal 20 media sosial."),
+  socialLinks: z
+    .array(socialLinkCreateSchema)
+    .max(20, "Maksimal 20 media sosial."),
 };
 
 export const profileUpdateSchema = z
   .object(profileUpdateFields)
   .partial()
   .strict()
-  .refine((value) => Object.keys(value).length > 0, "Minimal satu field harus diubah.");
+  .refine(
+    (value) => Object.keys(value).length > 0,
+    "Minimal satu field harus diubah.",
+  );
 
 export const qrExportQuerySchema = z
   .object({
@@ -313,7 +384,9 @@ export const qrExportQuerySchema = z
     errorCorrection: value.logo ? ("H" as const) : value.errorCorrection,
   }));
 
-export const profileStatusSchema = z.object({ status: z.enum(PROFILE_STATUSES) }).strict();
+export const profileStatusSchema = z
+  .object({ status: z.enum(PROFILE_STATUSES) })
+  .strict();
 
 export const profileListQuerySchema = z
   .object({
@@ -328,6 +401,12 @@ export const profileListQuerySchema = z
   })
   .strict()
   .refine(
-    (value) => !value.createdFrom || !value.createdTo || value.createdFrom <= value.createdTo,
-    { path: ["createdTo"], message: "Tanggal akhir harus setelah tanggal awal." },
+    (value) =>
+      !value.createdFrom ||
+      !value.createdTo ||
+      value.createdFrom <= value.createdTo,
+    {
+      path: ["createdTo"],
+      message: "Tanggal akhir harus setelah tanggal awal.",
+    },
   );

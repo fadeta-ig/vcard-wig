@@ -11,7 +11,10 @@ export const metadata: Metadata = { title: "Add Profile" };
 export default async function NewProfilePage() {
   const session = await getSessionFromCookies();
   if (!session) redirect("/admin/login");
-  const [locale, selected] = await Promise.all([getLocale(), resolveSelectedCompany(session)]);
+  const [locale, selected] = await Promise.all([
+    getLocale(),
+    resolveSelectedCompany(session),
+  ]);
   if (!selected) redirect("/admin/profiles");
   const company = await prisma.company.findUnique({
     where: { id: selected.id },
@@ -27,5 +30,12 @@ export default async function NewProfilePage() {
     },
   });
   if (!company) redirect("/admin/profiles");
-  return <ProfileEditor locale={locale} company={company} initialProfile={null} />;
+  return (
+    <ProfileEditor
+      key={company.id}
+      locale={locale}
+      company={company}
+      initialProfile={null}
+    />
+  );
 }

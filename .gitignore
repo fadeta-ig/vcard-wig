@@ -28,6 +28,10 @@
 
 # logs and editor files
 *.log
+!/docs/remediation-2026-11-09/*.log
 .DS_Store
 Thumbs.db
 *.tsbuildinfo
+
+/storage/
+/.tmp/

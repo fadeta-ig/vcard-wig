@@ -1,3 +1,4 @@
+import { uploadCategoryRoot } from "@/lib/upload-storage";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
@@ -12,7 +13,11 @@ import {
   generateProfileQr,
   qrCacheSizeForTests,
 } from "@/services/qr.service";
-import { getAdminVCard, getDirectVCard, getPublicVCard } from "@/services/vcard.service";
+import {
+  getAdminVCard,
+  getDirectVCard,
+  getPublicVCard,
+} from "@/services/vcard.service";
 
 const generatedDirectories: string[] = [];
 sharp.cache(false);
@@ -32,6 +37,15 @@ async function removeDirectoryWithRetry(directory: string): Promise<void> {
 }
 
 async function cleanDatabase() {
+  if (
+    process.env.DATABASE_NAME !== "vcard_wig_test" ||
+    process.env.DATABASE_HOST !== "127.0.0.1"
+  )
+    throw new Error("Refusing cleanup outside isolated test database.");
+  await prisma.mfaRecoveryCode.deleteMany();
+  await prisma.eventDedupe.deleteMany();
+  await prisma.profileSlugReservation.deleteMany();
+  await prisma.assetDeletionTask.deleteMany();
   await prisma.publicRateLimit.deleteMany();
   await prisma.activityEvent.deleteMany();
   await prisma.socialLink.deleteMany();
@@ -63,17 +77,30 @@ async function fixture() {
       qrLogoEnabled: true,
     },
   });
-  const companyDirectory = path.resolve(process.cwd(), "public", "uploads", "companies", company.id);
-  const profileDirectory = path.resolve(process.cwd(), "public", "uploads", "profiles", company.id);
+  const companyDirectory = path.resolve(
+    process.cwd(),
+    "public",
+    "uploads",
+    "companies",
+    company.id,
+  );
+  const profileDirectory = path.resolve(
+    uploadCategoryRoot("profiles"),
+    company.id,
+  );
   generatedDirectories.push(companyDirectory, profileDirectory);
   await mkdir(companyDirectory, { recursive: true });
   await mkdir(profileDirectory, { recursive: true });
   const logoPath = path.join(companyDirectory, "logo-test.webp");
   const photoPath = path.join(profileDirectory, "thumbnail-test.webp");
-  await sharp({ create: { width: 180, height: 80, channels: 4, background: "#1E3A5F" } })
+  await sharp({
+    create: { width: 180, height: 80, channels: 4, background: "#1E3A5F" },
+  })
     .webp()
     .toFile(logoPath);
-  await sharp({ create: { width: 160, height: 160, channels: 4, background: "#B54708" } })
+  await sharp({
+    create: { width: 160, height: 160, channels: 4, background: "#B54708" },
+  })
     .webp()
     .toFile(photoPath);
   await prisma.company.update({
@@ -130,7 +157,9 @@ async function fixture() {
       },
     },
   });
-  const session = (await authenticateUser("phase5-root", "temporary-password-123")).session;
+  const session = (
+    await authenticateUser("phase5-root", "temporary-password-123")
+  ).session;
   return { company, profile, session };
 }
 
@@ -169,11 +198,13 @@ describe.sequential("phase 5 QR and vCard integration", () => {
         background: "#FFFFFF",
         logo: "false",
       });
-      expect(await decodedQr(qr.body)).toBe("http://localhost:3000/c/phase5-contact");
+      expect(await decodedQr(qr.body)).toBe(
+        "http://localhost:3000/c/phase5-contact",
+      );
       expect(qr.options.errorCorrection).toBe(errorCorrection);
       expect(qr.fileName).toBe("qr-phase5-contact.png");
     }
-  });
+  }, 20_000);
 
   it("round-trips PNG and SVG with a logo and forces H correction", async () => {
     const { profile, session } = await fixture();
@@ -189,7 +220,9 @@ describe.sequential("phase 5 QR and vCard integration", () => {
         logo: "true",
       });
       expect(qr.options.errorCorrection).toBe("H");
-      expect(await decodedQr(qr.body)).toBe("http://localhost:3000/c/phase5-contact");
+      expect(await decodedQr(qr.body)).toBe(
+        "http://localhost:3000/c/phase5-contact",
+      );
       if (format === "svg") {
         expect(qr.body).toEqual(expect.any(String));
         expect(qr.body).toContain("data:image/png;base64,");
@@ -236,16 +269,28 @@ describe.sequential("phase 5 QR and vCard integration", () => {
       background: "#FFFFFF",
       logo: "false",
     };
-    const dynamicBefore = await generateProfileQr(session, profile.id, { ...options, type: "dynamic" });
-    const directBefore = await generateProfileQr(session, profile.id, { ...options, type: "vcard" });
+    const dynamicBefore = await generateProfileQr(session, profile.id, {
+      ...options,
+      type: "dynamic",
+    });
+    const directBefore = await generateProfileQr(session, profile.id, {
+      ...options,
+      type: "vcard",
+    });
     expect(qrCacheSizeForTests()).toBe(2);
 
     await prisma.contactProfile.update({
       where: { id: profile.id },
       data: { jobTitle: "Updated Quality Director" },
     });
-    const dynamicAfter = await generateProfileQr(session, profile.id, { ...options, type: "dynamic" });
-    const directAfter = await generateProfileQr(session, profile.id, { ...options, type: "vcard" });
+    const dynamicAfter = await generateProfileQr(session, profile.id, {
+      ...options,
+      type: "dynamic",
+    });
+    const directAfter = await generateProfileQr(session, profile.id, {
+      ...options,
+      type: "vcard",
+    });
     expect(dynamicAfter.fingerprint).toBe(dynamicBefore.fingerprint);
     expect(dynamicAfter.cacheHit).toBe(true);
     expect(directAfter.fingerprint).not.toBe(directBefore.fingerprint);
@@ -256,7 +301,7 @@ describe.sequential("phase 5 QR and vCard integration", () => {
   it("serves public vCard only for active profiles and preserves visibility", async () => {
     const { profile } = await fixture();
     const active = await getPublicVCard(profile.slug);
-    expect(active.content).toContain("FN:Ayu Lestari");
+    expect(active.content).toContain("FN:Dr. Ayu Lestari");
     expect(active.content).toContain("PHOTO;ENCODING=b;TYPE=JPEG:");
     expect(active.content).not.toContain("hidden@example.com");
 

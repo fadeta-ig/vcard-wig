@@ -19,6 +19,20 @@ export function uploadRoot(): string {
 }
 
 export function uploadCategoryRoot(category: UploadCategory): string {
+  if (category === "profiles") {
+    const root = path.resolve(
+      getEnvironment().PRIVATE_UPLOAD_DIR ?? "storage/private/profile-photos",
+    );
+    const publicRoot = path.resolve(process.cwd(), "public");
+    if (root === publicRoot || isWithin(publicRoot, root)) {
+      throw new AppError(
+        500,
+        "PRIVATE_UPLOAD_PATH_INVALID",
+        "Foto profil harus disimpan di luar direktori publik.",
+      );
+    }
+    return root;
+  }
   return path.resolve(uploadRoot(), category);
 }
 
@@ -33,7 +47,10 @@ function isWithin(root: string, target: string): boolean {
 }
 
 function safeSegments(segments: string[]): boolean {
-  return segments.length > 0 && segments.every((segment) => SAFE_SEGMENT.test(segment));
+  return (
+    segments.length > 0 &&
+    segments.every((segment) => SAFE_SEGMENT.test(segment))
+  );
 }
 
 export function resolveUploadSegments(
@@ -50,7 +67,8 @@ export function resolvePublicUploadPath(
   publicPath: string | null | undefined,
   expectedCategory?: UploadCategory,
 ): string | undefined {
-  if (!publicPath || publicPath.includes("\\") || publicPath.includes("..")) return undefined;
+  if (!publicPath || publicPath.includes("\\") || publicPath.includes(".."))
+    return undefined;
   const match = /^\/uploads\/(companies|profiles)\/(.+)$/.exec(publicPath);
   if (!match || !isUploadCategory(match[1])) return undefined;
   const category = match[1];
@@ -62,18 +80,21 @@ export function publicPathForStoredFile(
   filePath: string,
   expectedCategory: UploadCategory,
 ): string {
-  const root = uploadRoot();
+  const root = uploadCategoryRoot(expectedCategory);
   const relative = path.relative(root, path.resolve(filePath));
   const segments = relative.split(path.sep);
-  const [category, ...assetSegments] = segments;
+  const assetSegments = segments;
   if (
-    category !== expectedCategory ||
     !safeSegments(assetSegments) ||
     path.isAbsolute(relative) ||
     relative === ".." ||
     relative.startsWith(`..${path.sep}`)
   ) {
-    throw new AppError(500, "UPLOAD_PATH_INVALID", "Lokasi file upload tidak valid.");
+    throw new AppError(
+      500,
+      "UPLOAD_PATH_INVALID",
+      "Lokasi file upload tidak valid.",
+    );
   }
-  return `/uploads/${category}/${assetSegments.join("/")}`;
+  return `/uploads/${expectedCategory}/${assetSegments.join("/")}`;
 }

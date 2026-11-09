@@ -1,3 +1,4 @@
+import { requireProfileMutation } from "@/services/profile-mutation.service";
 import type { NextRequest } from "next/server";
 import { readJsonBody, routeErrorResponse, successResponse } from "@/lib/api";
 import { assertCsrf } from "@/lib/security/request";
@@ -11,9 +12,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
   try {
     const session = await requireRequestSession(request);
     assertCsrf(request, session);
+    const mutation = await requireProfileMutation(request, session);
     const input = socialLinkCreateSchema.parse(await readJsonBody(request));
     const { id } = await context.params;
-    return successResponse(await createSocialLink(session, id, input), 201);
+    return successResponse(
+      await createSocialLink(session, id, input, mutation),
+      201,
+    );
   } catch (error) {
     return routeErrorResponse(error);
   }

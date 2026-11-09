@@ -15,6 +15,7 @@ type LoginResponse = {
 
 export function LoginForm({ locale }: { locale: Locale }) {
   const router = useRouter();
+  const [mfaRequired, setMfaRequired] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,12 +31,17 @@ export function LoginForm({ locale }: { locale: Locale }) {
         body: {
           identifier: form.get("identifier"),
           password: form.get("password"),
+          mfaCode: String(form.get("mfaCode") ?? "") || undefined,
         },
       });
-      router.replace(result.user.mustChangePassword ? "/admin/change-password" : "/admin");
+      router.replace(
+        result.user.mustChangePassword ? "/admin/change-password" : "/admin",
+      );
       router.refresh();
     } catch (caught) {
       if (caught instanceof ApiClientError) {
+        if (caught.code === "MFA_REQUIRED" || caught.code === "MFA_INVALID")
+          setMfaRequired(true);
         setError(
           caught.code === "LOGIN_RATE_LIMITED"
             ? translate(locale, "auth.rateLimited")
@@ -62,7 +68,9 @@ export function LoginForm({ locale }: { locale: Locale }) {
           </div>
         ) : null}
         <div className="field">
-          <label htmlFor="identifier">{translate(locale, "auth.identifier")}</label>
+          <label htmlFor="identifier">
+            {translate(locale, "auth.identifier")}
+          </label>
           <input
             id="identifier"
             name="identifier"
@@ -86,9 +94,32 @@ export function LoginForm({ locale }: { locale: Locale }) {
             required
           />
         </div>
-        <button className="button button-primary" type="submit" disabled={pending}>
+        {mfaRequired ? (
+          <div className="field">
+            <label htmlFor="mfa-code">
+              {locale === "id"
+                ? "Kode authenticator atau pemulihan"
+                : "Authenticator or recovery code"}
+            </label>
+            <input
+              id="mfa-code"
+              name="mfaCode"
+              autoComplete="one-time-code"
+              maxLength={64}
+              required
+              autoFocus
+            />
+          </div>
+        ) : null}
+        <button
+          className="button button-primary"
+          type="submit"
+          disabled={pending}
+        >
           <LogIn size={17} aria-hidden="true" />
-          {pending ? translate(locale, "auth.loggingIn") : translate(locale, "auth.login")}
+          {pending
+            ? translate(locale, "auth.loggingIn")
+            : translate(locale, "auth.login")}
         </button>
       </form>
     </>

@@ -21,23 +21,60 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default async function PrivacyPage({ searchParams }: { searchParams: Promise<{ from?: string }> }) {
+export default async function PrivacyPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ from?: string }>;
+}) {
   const [locale, query] = await Promise.all([getLocale(), searchParams]);
   const copy = publicProfileMessages(locale);
   const from = query.from && isPublicSlug(query.from) ? query.from : undefined;
+  const environment = getEnvironment();
   return (
     <main className="public-profile-shell public-privacy-shell">
       <article className="public-privacy-card">
         <header className="public-privacy-header">
-          <div className="public-privacy-icon" aria-hidden="true"><ShieldCheck size={24} /></div>
+          <div className="public-privacy-icon" aria-hidden="true">
+            <ShieldCheck size={24} />
+          </div>
           <LanguageSwitcher locale={locale} />
         </header>
         <h1>{copy.privacyTitle}</h1>
         <p className="public-privacy-intro">{copy.privacyIntro}</p>
-        <section><h2>{copy.privacyAnalyticsTitle}</h2><p>{copy.privacyAnalytics}</p></section>
-        <section><h2>{copy.privacyControlTitle}</h2><p>{copy.privacyControl}</p></section>
-        <section><h2>{copy.privacyContactTitle}</h2><p>{copy.privacyContact}</p></section>
-        {from ? <Link className="public-privacy-link" href={`/c/${from}` as Route}>{copy.backToProfile}</Link> : null}
+        <section>
+          <h2>{copy.privacyAnalyticsTitle}</h2>
+          <p>{copy.privacyAnalytics}</p>
+        </section>
+        <section>
+          <h2>
+            {locale === "id"
+              ? "Retensi dan permintaan koreksi"
+              : "Retention and correction requests"}
+          </h2>
+          <p>
+            {locale === "id"
+              ? `Catatan aktivitas memiliki masa retensi ${environment.ANALYTICS_RETENTION_DAYS} hari dan dihapus oleh pemeliharaan terjadwal. Cookie token browser berlaku paling lama 365 hari. Hubungi administrator perusahaan untuk koreksi atau penghapusan informasi kontak.`
+              : `Activity records have a retention period of ${environment.ANALYTICS_RETENTION_DAYS} days and are removed by scheduled maintenance. The browser-token cookie lasts up to 365 days. Contact the company administrator to correct or delete contact information.`}
+          </p>
+          {environment.PRIVACY_CONTACT_EMAIL ? (
+            <a href={`mailto:${environment.PRIVACY_CONTACT_EMAIL}`}>
+              {environment.PRIVACY_CONTACT_EMAIL}
+            </a>
+          ) : null}
+        </section>
+        <section>
+          <h2>{copy.privacyControlTitle}</h2>
+          <p>{copy.privacyControl}</p>
+        </section>
+        <section>
+          <h2>{copy.privacyContactTitle}</h2>
+          <p>{copy.privacyContact}</p>
+        </section>
+        {from ? (
+          <Link className="public-privacy-link" href={`/c/${from}` as Route}>
+            {copy.backToProfile}
+          </Link>
+        ) : null}
       </article>
     </main>
   );

@@ -3,7 +3,11 @@ import { notFound, redirect } from "next/navigation";
 import { ProfileEditor } from "@/components/admin/profile-editor";
 import { getLocale } from "@/i18n/server";
 import { AppError } from "@/lib/api";
-import type { ProfileSection, ProfileStatusValue, SocialPlatform } from "@/lib/profile-options";
+import type {
+  ProfileSection,
+  ProfileStatusValue,
+  SocialPlatform,
+} from "@/lib/profile-options";
 import type { ProfileView } from "@/lib/profile-types";
 import { getSessionFromCookies } from "@/services/auth.service";
 import { getProfileForSession } from "@/services/profile.service";
@@ -15,10 +19,17 @@ type PageContext = {
   searchParams: Promise<{ notice?: string }>;
 };
 
-export default async function EditProfilePage({ params, searchParams }: PageContext) {
+export default async function EditProfilePage({
+  params,
+  searchParams,
+}: PageContext) {
   const session = await getSessionFromCookies();
   if (!session) redirect("/admin/login");
-  const [{ id }, query, locale] = await Promise.all([params, searchParams, getLocale()]);
+  const [{ id }, query, locale] = await Promise.all([
+    params,
+    searchParams,
+    getLocale(),
+  ]);
   let profile;
   try {
     profile = await getProfileForSession(session, id);
@@ -31,6 +42,7 @@ export default async function EditProfilePage({ params, searchParams }: PageCont
     status: profile.status as ProfileStatusValue,
     sectionOrder: profile.sectionOrder as ProfileSection[],
     publishedAt: profile.publishedAt?.toISOString() ?? null,
+    firstPublishedAt: profile.firstPublishedAt?.toISOString() ?? null,
     createdAt: profile.createdAt.toISOString(),
     updatedAt: profile.updatedAt.toISOString(),
     socialLinks: profile.socialLinks.map((link) => ({
@@ -40,8 +52,18 @@ export default async function EditProfilePage({ params, searchParams }: PageCont
       updatedAt: link.updatedAt.toISOString(),
     })),
   };
-  const notice = ["created", "saved", "photo-error"].includes(query.notice ?? "")
+  const notice = ["created", "saved", "photo-error"].includes(
+    query.notice ?? "",
+  )
     ? (query.notice as "created" | "saved" | "photo-error")
     : undefined;
-  return <ProfileEditor locale={locale} company={serialized.company} initialProfile={serialized} initialNotice={notice} />;
+  return (
+    <ProfileEditor
+      key={serialized.id}
+      locale={locale}
+      company={serialized.company}
+      initialProfile={serialized}
+      initialNotice={notice}
+    />
+  );
 }

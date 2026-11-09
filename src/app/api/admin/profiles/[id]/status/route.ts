@@ -1,3 +1,4 @@
+import { requireProfileMutation } from "@/services/profile-mutation.service";
 import type { NextRequest } from "next/server";
 import { ProfileStatus } from "@/generated/prisma/client";
 import { readJsonBody, routeErrorResponse, successResponse } from "@/lib/api";
@@ -12,10 +13,16 @@ export async function POST(request: NextRequest, context: RouteContext) {
   try {
     const session = await requireRequestSession(request);
     assertCsrf(request, session);
+    const mutation = await requireProfileMutation(request, session);
     const input = profileStatusSchema.parse(await readJsonBody(request));
     const { id } = await context.params;
     return successResponse(
-      await changeProfileStatus(session, id, input.status as ProfileStatus),
+      await changeProfileStatus(
+        session,
+        id,
+        input.status as ProfileStatus,
+        mutation,
+      ),
     );
   } catch (error) {
     return routeErrorResponse(error);

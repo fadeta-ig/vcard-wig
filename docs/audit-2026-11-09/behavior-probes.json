@@ -1,0 +1,43 @@
+{
+  "date": "2026-11-09",
+  "method": "Isolated source/service probes with in-memory Prisma doubles; synthetic local asset; no live DB or browser verification.",
+  "findings": [
+    {
+      "id": "CSV_FORMULA",
+      "reproduced": true,
+      "evidence": "User-controlled displayName =1+1 remains an unescaped formula prefix in exported CSV."
+    },
+    {
+      "id": "SLUG_AFTER_RESTORE",
+      "reproduced": true,
+      "evidence": "ACTIVE -> ARCHIVED -> DRAFT clears publishedAt; updateProfile then accepts a different slug. Old printed URL is no longer reserved by this profile."
+    },
+    {
+      "id": "STALE_EDITOR_OVERWRITE",
+      "reproduced": true,
+      "evidence": "A stale full-form payload overwrites editor A jobTitle without a version conflict. Service calls use an in-memory database double."
+    },
+    {
+      "id": "EVENT_DEDUPE_RACE",
+      "reproduced": true,
+      "evidence": "Two concurrent calls whose pre-insert duplicate reads both miss are both accepted; controlled interleaving with in-memory Prisma doubles, not a database load test."
+    },
+    {
+      "id": "PUBLIC_ASSET_NO_PROFILE_CHECK",
+      "reproduced": true,
+      "status": 200,
+      "databaseReads": 0,
+      "cacheControl": "public, max-age=31536000, immutable",
+      "evidence": "Synthetic image served anonymously without checking profile/company status or showPhoto."
+    },
+    {
+      "id": "BRAND_TEXT_CONTRAST",
+      "reproduced": true,
+      "exampleColor": "#FFFFFF",
+      "publicButtonForeground": "#1A1D21",
+      "adminButtonForeground": "#FFFFFF",
+      "adminContrast": 1,
+      "evidence": "Company primaryColor permits white. Admin primary buttons hard-code white text; public buttons choose a contrasting foreground, but public company-name text also uses brand color on a white surface."
+    }
+  ]
+}

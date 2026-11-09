@@ -1,0 +1,19 @@
+{
+  "date": "2026-11-09",
+  "timezone": "Asia/Jakarta",
+  "sourceCommit": "c694a3f",
+  "scope": "Local source audit; no application source or database changes; audit files and local build artifacts only",
+  "lint": {"exitCode": 0, "initialWarnings": 1, "note": "Warning in the newly added probe config was corrected and targeted ESLint rerun is recorded in lint-audit-config.log"},
+  "typecheck": {"exitCode": 0},
+  "unitTests": {"passed": 35, "failed": 0, "files": 11, "evidence": "unit-tests.json"},
+  "editorProbes": {"passed": 2, "failed": 0, "method": "jsdom and mocked API; reproductions of current behavior", "evidence": "editor-probes.json"},
+  "behaviorProbes": {"reproductions": 6, "method": "In-memory Prisma doubles and synthetic asset; no live database", "evidence": "behavior-probes.json"},
+  "dependencyAudit": {"command": "npm audit --omit=dev --json", "totalPackageEntries": 18, "critical": 1, "high": 11, "moderate": 6, "low": 0, "evidence": "dependency-audit.json", "note": "Package aggregate findings; exploitability on production not verified"},
+  "defaultBuild": {"exitCode": 1, "command": "npm run build", "error": "Turbopack failed to create Prisma junction: The file exists (os error 80)"},
+  "webpackBuild": {"exitCode": 0, "command": "npm run build -- --webpack", "note": "Compile, TypeScript, static-page generation and build traces completed"},
+  "integrationTests": {"executed": false, "reason": "Read-only preflight: ER_BAD_DB_ERROR, vcard_wig_test is absent; no database created"},
+  "browserReview": {"completed": false, "reason": "Computer Use stopped because the current Windows browser URL could not be determined confidently"},
+  "productionVerified": false,
+  "physicalDeviceUatVerified": false,
+  "realUserPerformanceMeasured": false
+}

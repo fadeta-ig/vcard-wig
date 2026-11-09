@@ -1,8 +1,4 @@
-import {
-  Prisma,
-  ProfileStatus,
-  UserRole,
-} from "@/generated/prisma/client";
+import { Prisma, ProfileStatus, UserRole } from "@/generated/prisma/client";
 import type { z } from "zod";
 import { AppError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
@@ -24,6 +20,16 @@ import type {
 } from "@/lib/validation";
 import { assertCompanyAccess } from "@/services/authorization.service";
 import type { AuthenticatedSession } from "@/services/auth.service";
+import { hashToken } from "@/lib/security/crypto";
+import {
+  assertProfileContext,
+  claimProfileVersion,
+  type ProfileMutationContext,
+} from "@/services/profile-mutation.service";
+import {
+  processAssetDeletions,
+  queueAssetDeletion,
+} from "@/services/asset-cleanup.service";
 
 type ProfileCreateInput = z.infer<typeof profileCreateSchema>;
 type ProfileUpdateInput = z.infer<typeof profileUpdateSchema>;
@@ -33,6 +39,7 @@ type SocialLinkUpdateInput = z.infer<typeof socialLinkUpdateSchema>;
 
 const profileListSelect = {
   id: true,
+  version: true,
   slug: true,
   displayName: true,
   firstName: true,
@@ -54,6 +61,9 @@ const profileListSelect = {
 
 export const profileDetailSelect = {
   id: true,
+  version: true,
+  firstPublishedAt: true,
+  allowIndexing: true,
   companyId: true,
   slug: true,
   firstName: true,
@@ -82,6 +92,9 @@ export const profileDetailSelect = {
   showPhoto: true,
   showEmail: true,
   showPhone: true,
+  showWorkPhone: true,
+  showMobilePhone: true,
+  showWhatsapp: true,
   showAddress: true,
   showSocialLinks: true,
   sectionOrder: true,
@@ -120,7 +133,9 @@ export const profileDetailSelect = {
   },
 } satisfies Prisma.ContactProfileSelect;
 
-type ProfileDetail = Prisma.ContactProfileGetPayload<{ select: typeof profileDetailSelect }>;
+type ProfileDetail = Prisma.ContactProfileGetPayload<{
+  select: typeof profileDetailSelect;
+}>;
 
 function isUniqueConstraintError(error: unknown): boolean {
   return (
@@ -131,13 +146,17 @@ function isUniqueConstraintError(error: unknown): boolean {
   );
 }
 
-export function normalizeProfileSectionOrder(value: Prisma.JsonValue | null): ProfileSection[] {
+export function normalizeProfileSectionOrder(
+  value: Prisma.JsonValue | null,
+): ProfileSection[] {
   if (
     Array.isArray(value) &&
     value.length === PROFILE_SECTIONS.length &&
     new Set(value).size === PROFILE_SECTIONS.length &&
-    value.every((item) =>
-      typeof item === "string" && (PROFILE_SECTIONS as readonly string[]).includes(item),
+    value.every(
+      (item) =>
+        typeof item === "string" &&
+        (PROFILE_SECTIONS as readonly string[]).includes(item),
     )
   ) {
     return value as ProfileSection[];
@@ -157,7 +176,10 @@ function displayNameFor(input: {
   firstName: string;
   lastName?: string | null;
 }): string {
-  return input.displayName || [input.firstName, input.lastName].filter(Boolean).join(" ");
+  return (
+    input.displayName ||
+    [input.firstName, input.lastName].filter(Boolean).join(" ")
+  );
 }
 
 function baseSlugFor(value: string): string {
@@ -203,11 +225,15 @@ function auditSnapshot(profile: {
     companyName: profile.companyName,
     hasPhoto: Boolean(profile.profilePhoto),
     socialLinkCount: profile.socialLinks?.length ?? 0,
-    activeSocialLinkCount: profile.socialLinks?.filter((link) => link.isActive).length ?? 0,
+    activeSocialLinkCount:
+      profile.socialLinks?.filter((link) => link.isActive).length ?? 0,
   };
 }
 
-function changedProfileFields(existing: ProfileDetail, updated: ProfileDetail): string[] {
+function changedProfileFields(
+  existing: ProfileDetail,
+  updated: ProfileDetail,
+): string[] {
   const fields = [
     "slug",
     "firstName",
@@ -238,30 +264,38 @@ function changedProfileFields(existing: ProfileDetail, updated: ProfileDetail): 
     "sectionOrder",
   ] as const;
   const changed: string[] = fields.filter(
-    (field) => JSON.stringify(existing[field]) !== JSON.stringify(updated[field]),
+    (field) =>
+      JSON.stringify(existing[field]) !== JSON.stringify(updated[field]),
   );
-  const existingSocials = existing.socialLinks.map(({ platform, label, username, url, sortOrder, isActive }) => ({
-    platform,
-    label,
-    username,
-    url,
-    sortOrder,
-    isActive,
-  }));
-  const updatedSocials = updated.socialLinks.map(({ platform, label, username, url, sortOrder, isActive }) => ({
-    platform,
-    label,
-    username,
-    url,
-    sortOrder,
-    isActive,
-  }));
-  if (JSON.stringify(existingSocials) !== JSON.stringify(updatedSocials)) changed.push("socialLinks");
+  const existingSocials = existing.socialLinks.map(
+    ({ platform, label, username, url, sortOrder, isActive }) => ({
+      platform,
+      label,
+      username,
+      url,
+      sortOrder,
+      isActive,
+    }),
+  );
+  const updatedSocials = updated.socialLinks.map(
+    ({ platform, label, username, url, sortOrder, isActive }) => ({
+      platform,
+      label,
+      username,
+      url,
+      sortOrder,
+      isActive,
+    }),
+  );
+  if (JSON.stringify(existingSocials) !== JSON.stringify(updatedSocials))
+    changed.push("socialLinks");
   return changed;
 }
 
 function jakartaBoundary(date: string, endOfDay: boolean): Date {
-  return new Date(`${date}T${endOfDay ? "23:59:59.999" : "00:00:00.000"}+07:00`);
+  return new Date(
+    `${date}T${endOfDay ? "23:59:59.999" : "00:00:00.000"}+07:00`,
+  );
 }
 
 export async function listProfiles(
@@ -292,8 +326,12 @@ export async function listProfiles(
   if (input.department) where.department = input.department;
   if (input.createdFrom || input.createdTo) {
     where.createdAt = {
-      ...(input.createdFrom ? { gte: jakartaBoundary(input.createdFrom, false) } : {}),
-      ...(input.createdTo ? { lte: jakartaBoundary(input.createdTo, true) } : {}),
+      ...(input.createdFrom
+        ? { gte: jakartaBoundary(input.createdFrom, false) }
+        : {}),
+      ...(input.createdTo
+        ? { lte: jakartaBoundary(input.createdTo, true) }
+        : {}),
     };
   }
 
@@ -306,29 +344,32 @@ export async function listProfiles(
           ? [{ viewCount: "desc" }, { displayName: "asc" }]
           : [{ createdAt: "desc" }];
 
-  const [items, totalItems, departmentRows, groupedStatuses] = await prisma.$transaction([
-    prisma.contactProfile.findMany({
-      where,
-      select: profileListSelect,
-      orderBy,
-      skip: (input.page - 1) * input.pageSize,
-      take: input.pageSize,
-    }),
-    prisma.contactProfile.count({ where }),
-    prisma.contactProfile.findMany({
-      where: { companyId, department: { not: null } },
-      distinct: ["department"],
-      select: { department: true },
-      orderBy: { department: "asc" },
-    }),
-    prisma.contactProfile.groupBy({
-      by: ["status"],
-      where: { companyId },
-      _count: { _all: true },
-    }),
-  ]);
+  const [items, totalItems, departmentRows, groupedStatuses] =
+    await prisma.$transaction([
+      prisma.contactProfile.findMany({
+        where,
+        select: profileListSelect,
+        orderBy,
+        skip: (input.page - 1) * input.pageSize,
+        take: input.pageSize,
+      }),
+      prisma.contactProfile.count({ where }),
+      prisma.contactProfile.findMany({
+        where: { companyId, department: { not: null } },
+        distinct: ["department"],
+        select: { department: true },
+        orderBy: { department: "asc" },
+      }),
+      prisma.contactProfile.groupBy({
+        by: ["status"],
+        where: { companyId },
+        _count: { _all: true },
+      }),
+    ]);
 
-  const counts = new Map(groupedStatuses.map((row) => [row.status, row._count._all]));
+  const counts = new Map(
+    groupedStatuses.map((row) => [row.status, row._count._all]),
+  );
   const summary = {
     draft: counts.get(ProfileStatus.DRAFT) ?? 0,
     active: counts.get(ProfileStatus.ACTIVE) ?? 0,
@@ -349,7 +390,10 @@ export async function listProfiles(
         .map((row) => row.department)
         .filter((value): value is string => Boolean(value)),
     },
-    summary: { ...summary, total: Object.values(summary).reduce((sum, count) => sum + count, 0) },
+    summary: {
+      ...summary,
+      total: Object.values(summary).reduce((sum, count) => sum + count, 0),
+    },
   };
 }
 
@@ -361,7 +405,8 @@ export async function getProfileForSession(
     where: { id: profileId },
     select: profileDetailSelect,
   });
-  if (!profile) throw new AppError(404, "PROFILE_NOT_FOUND", "Profil tidak ditemukan.");
+  if (!profile)
+    throw new AppError(404, "PROFILE_NOT_FOUND", "Profil tidak ditemukan.");
   await assertCompanyAccess(session, profile.companyId);
   return normalizedProfile(profile);
 }
@@ -376,7 +421,8 @@ export async function createProfile(
     where: { id: companyId },
     select: { id: true, isActive: true },
   });
-  if (!company?.isActive) throw new AppError(404, "COMPANY_NOT_FOUND", "Perusahaan tidak ditemukan.");
+  if (!company?.isActive)
+    throw new AppError(404, "COMPANY_NOT_FOUND", "Perusahaan tidak ditemukan.");
 
   const displayName = displayNameFor(input);
   const explicitSlug = input.slug;
@@ -406,6 +452,10 @@ export async function createProfile(
     showPhoto: input.showPhoto,
     showEmail: input.showEmail,
     showPhone: input.showPhone,
+    showWorkPhone: input.showWorkPhone,
+    showMobilePhone: input.showMobilePhone,
+    showWhatsapp: input.showWhatsapp,
+    allowIndexing: input.allowIndexing,
     showAddress: input.showAddress,
     showSocialLinks: input.showSocialLinks,
   };
@@ -413,11 +463,18 @@ export async function createProfile(
   for (let sequence = 1; sequence <= 100; sequence += 1) {
     const slug = slugWithSuffix(baseSlug, sequence);
     if (explicitSlug && sequence > 1) {
-      throw new AppError(409, "PROFILE_SLUG_CONFLICT", "Slug profil sudah digunakan.");
+      throw new AppError(
+        409,
+        "PROFILE_SLUG_CONFLICT",
+        "Slug profil sudah digunakan.",
+      );
     }
 
     try {
       const created = await prisma.$transaction(async (transaction) => {
+        await transaction.profileSlugReservation.create({
+          data: { slugHash: hashToken(`profile-slug:${slug}`) },
+        });
         const profile = await transaction.contactProfile.create({
           data: {
             ...profileFields,
@@ -429,6 +486,10 @@ export async function createProfile(
             socialLinks: { create: socialLinks },
           },
           select: profileDetailSelect,
+        });
+        await transaction.profileSlugReservation.update({
+          where: { slugHash: hashToken(`profile-slug:${slug}`) },
+          data: { profileId: profile.id },
         });
         await transaction.auditLog.create({
           data: {
@@ -449,7 +510,11 @@ export async function createProfile(
     }
   }
 
-  throw new AppError(409, "PROFILE_SLUG_CONFLICT", "Slug profil tidak dapat dialokasikan.");
+  throw new AppError(
+    409,
+    "PROFILE_SLUG_CONFLICT",
+    "Slug profil tidak dapat dialokasikan.",
+  );
 }
 
 const mutableProfileFields = [
@@ -475,6 +540,10 @@ const mutableProfileFields = [
   "showPhoto",
   "showEmail",
   "showPhone",
+  "showWorkPhone",
+  "showMobilePhone",
+  "showWhatsapp",
+  "allowIndexing",
   "showAddress",
   "showSocialLinks",
 ] as const;
@@ -483,8 +552,10 @@ export async function updateProfile(
   session: AuthenticatedSession,
   profileId: string,
   input: ProfileUpdateInput,
+  context?: ProfileMutationContext,
 ) {
   const existing = await getProfileForSession(session, profileId);
+  assertProfileContext(existing.companyId, context);
   const updateData: Prisma.ContactProfileUncheckedUpdateInput = {};
 
   for (const field of mutableProfileFields) {
@@ -495,7 +566,8 @@ export async function updateProfile(
   }
 
   const finalFirstName = input.firstName ?? existing.firstName;
-  const finalLastName = input.lastName === undefined ? existing.lastName : input.lastName;
+  const finalLastName =
+    input.lastName === undefined ? existing.lastName : input.lastName;
   const finalDisplayName =
     input.displayName === undefined
       ? existing.displayName
@@ -504,11 +576,12 @@ export async function updateProfile(
           firstName: finalFirstName,
           lastName: finalLastName,
         });
-  if (input.displayName !== undefined) updateData.displayName = finalDisplayName;
+  if (input.displayName !== undefined)
+    updateData.displayName = finalDisplayName;
 
   if (input.slug !== undefined) {
     const nextSlug = input.slug ?? baseSlugFor(finalDisplayName);
-    if (existing.publishedAt && nextSlug !== existing.slug) {
+    if (existing.firstPublishedAt && nextSlug !== existing.slug) {
       throw new AppError(
         409,
         "PROFILE_SLUG_LOCKED",
@@ -519,7 +592,11 @@ export async function updateProfile(
       where: { slug: nextSlug, id: { not: profileId } },
     });
     if (duplicate) {
-      throw new AppError(409, "PROFILE_SLUG_CONFLICT", "Slug profil sudah digunakan.");
+      throw new AppError(
+        409,
+        "PROFILE_SLUG_CONFLICT",
+        "Slug profil sudah digunakan.",
+      );
     }
     updateData.slug = nextSlug;
   }
@@ -534,6 +611,25 @@ export async function updateProfile(
   }
 
   const updated = await prisma.$transaction(async (transaction) => {
+    await claimProfileVersion(transaction, existing, context?.expectedVersion);
+    if (
+      typeof updateData.slug === "string" &&
+      updateData.slug !== existing.slug
+    ) {
+      const slugHash = hashToken(`profile-slug:${updateData.slug}`);
+      const reserved = await transaction.profileSlugReservation.findUnique({
+        where: { slugHash },
+      });
+      if (reserved)
+        throw new AppError(
+          409,
+          "PROFILE_SLUG_CONFLICT",
+          "Slug sudah digunakan atau dicadangkan untuk menjaga QR lama.",
+        );
+      await transaction.profileSlugReservation.create({
+        data: { slugHash, profileId },
+      });
+    }
     const profile = await transaction.contactProfile.update({
       where: { id: profileId },
       data: updateData,
@@ -572,9 +668,23 @@ export async function changeProfileStatus(
   session: AuthenticatedSession,
   profileId: string,
   nextStatus: ProfileStatus,
+  context?: ProfileMutationContext,
 ) {
   const existing = await getProfileForSession(session, profileId);
-  if (existing.status === nextStatus) return existing;
+  assertProfileContext(existing.companyId, context);
+  if (existing.status === nextStatus) {
+    if (
+      context?.expectedVersion !== undefined &&
+      context.expectedVersion !== existing.version
+    ) {
+      throw new AppError(
+        409,
+        "PROFILE_VERSION_CONFLICT",
+        "Profil sudah berubah. Muat ulang sebelum mencoba kembali.",
+      );
+    }
+    return existing;
+  }
   if (!allowedStatusTransitions[existing.status].includes(nextStatus)) {
     throw new AppError(
       409,
@@ -584,10 +694,14 @@ export async function changeProfileStatus(
   }
 
   const updated = await prisma.$transaction(async (transaction) => {
+    await claimProfileVersion(transaction, existing, context?.expectedVersion);
     const profile = await transaction.contactProfile.update({
       where: { id: profileId },
       data: {
         status: nextStatus,
+        ...(nextStatus === ProfileStatus.ACTIVE && !existing.firstPublishedAt
+          ? { firstPublishedAt: new Date() }
+          : {}),
         ...(nextStatus === ProfileStatus.ACTIVE && !existing.publishedAt
           ? { publishedAt: new Date() }
           : {}),
@@ -611,24 +725,101 @@ export async function changeProfileStatus(
   return normalizedProfile(updated);
 }
 
-export function archiveProfile(session: AuthenticatedSession, profileId: string) {
-  return changeProfileStatus(session, profileId, ProfileStatus.ARCHIVED);
+export function archiveProfile(
+  session: AuthenticatedSession,
+  profileId: string,
+  context?: ProfileMutationContext,
+) {
+  return changeProfileStatus(
+    session,
+    profileId,
+    ProfileStatus.ARCHIVED,
+    context,
+  );
+}
+
+export async function permanentlyDeleteProfile(
+  session: AuthenticatedSession,
+  profileId: string,
+  confirmation: string,
+  context: ProfileMutationContext,
+) {
+  const existing = await getProfileForSession(session, profileId);
+  assertProfileContext(existing.companyId, context);
+  if (existing.status !== ProfileStatus.ARCHIVED) {
+    throw new AppError(
+      409,
+      "PROFILE_MUST_BE_ARCHIVED",
+      "Hanya profil berstatus Arsip yang dapat dihapus permanen.",
+    );
+  }
+  if (confirmation.trim() !== existing.slug) {
+    throw new AppError(
+      422,
+      "DELETE_CONFIRMATION_REQUIRED",
+      "Ketik slug profil dengan tepat untuk mengonfirmasi hapus permanen.",
+    );
+  }
+  const paths = [existing.profilePhoto, existing.profileThumbnail].filter(
+    (value): value is string => Boolean(value),
+  );
+  await prisma.$transaction(async (transaction) => {
+    await claimProfileVersion(transaction, existing, context.expectedVersion);
+    // A concurrent restore also changes version, so it cannot be deleted accidentally.
+    await queueAssetDeletion(transaction, paths);
+    await transaction.profileSlugReservation.upsert({
+      where: { slugHash: hashToken(`profile-slug:${existing.slug}`) },
+      create: { slugHash: hashToken(`profile-slug:${existing.slug}`) },
+      update: { profileId: null },
+    });
+    await transaction.profileSlugReservation.updateMany({
+      where: { profileId },
+      data: { profileId: null },
+    });
+    await transaction.contactProfile.delete({ where: { id: profileId } });
+    // Retain the administrative event without copying the deleted contact's PII.
+    await transaction.auditLog.updateMany({
+      where: { entityType: "ContactProfile", entityId: profileId },
+      data: { oldValues: Prisma.DbNull, newValues: Prisma.DbNull },
+    });
+    await transaction.auditLog.create({
+      data: {
+        userId: session.user.id,
+        companyId: existing.companyId,
+        action: "PROFILE_PERMANENTLY_DELETED",
+        entityType: "ContactProfile",
+        entityId: profileId,
+        newValues: { deleted: true, previousStatus: "ARCHIVED" },
+      },
+    });
+  });
+  const cleanup = await processAssetDeletions(paths).catch(() => ({
+    pending: paths.length,
+  }));
+  return { deleted: true, assetCleanupPending: cleanup.pending > 0 };
 }
 
 export async function createSocialLink(
   session: AuthenticatedSession,
   profileId: string,
   input: SocialLinkCreateInput,
+  context?: ProfileMutationContext,
 ) {
   const profile = await getProfileForSession(session, profileId);
+  assertProfileContext(profile.companyId, context);
   if (profile.socialLinks.length >= 20) {
-    throw new AppError(422, "SOCIAL_LINK_LIMIT_REACHED", "Maksimal 20 media sosial per profil.");
+    throw new AppError(
+      422,
+      "SOCIAL_LINK_LIMIT_REACHED",
+      "Maksimal 20 media sosial per profil.",
+    );
   }
   const maximum = await prisma.socialLink.aggregate({
     where: { contactProfileId: profileId },
     _max: { sortOrder: true },
   });
   const link = await prisma.$transaction(async (transaction) => {
+    await claimProfileVersion(transaction, profile, context?.expectedVersion);
     const created = await transaction.socialLink.create({
       data: {
         contactProfileId: profileId,
@@ -656,21 +847,39 @@ export async function updateSocialLink(
   session: AuthenticatedSession,
   socialLinkId: string,
   input: SocialLinkUpdateInput,
+  context?: ProfileMutationContext,
 ) {
   const existing = await prisma.socialLink.findUnique({
     where: { id: socialLinkId },
-    include: { contactProfile: { select: { companyId: true } } },
+    include: {
+      contactProfile: { select: { id: true, version: true, companyId: true } },
+    },
   });
-  if (!existing) throw new AppError(404, "SOCIAL_LINK_NOT_FOUND", "Media sosial tidak ditemukan.");
+  if (!existing)
+    throw new AppError(
+      404,
+      "SOCIAL_LINK_NOT_FOUND",
+      "Media sosial tidak ditemukan.",
+    );
   await assertCompanyAccess(session, existing.contactProfile.companyId);
+  assertProfileContext(existing.contactProfile.companyId, context);
 
   const platform = (input.platform ?? existing.platform) as SocialPlatform;
   const label = input.label === undefined ? existing.label : input.label;
   if (platform === "CUSTOM" && !label) {
-    throw new AppError(422, "SOCIAL_LABEL_REQUIRED", "Label wajib diisi untuk custom link.");
+    throw new AppError(
+      422,
+      "SOCIAL_LABEL_REQUIRED",
+      "Label wajib diisi untuk custom link.",
+    );
   }
 
   const updated = await prisma.$transaction(async (transaction) => {
+    await claimProfileVersion(
+      transaction,
+      existing.contactProfile,
+      context?.expectedVersion,
+    );
     const link = await transaction.socialLink.update({
       where: { id: socialLinkId },
       data: {
@@ -699,16 +908,30 @@ export async function updateSocialLink(
 export async function deleteSocialLink(
   session: AuthenticatedSession,
   socialLinkId: string,
+  context?: ProfileMutationContext,
 ): Promise<void> {
   const existing = await prisma.socialLink.findUnique({
     where: { id: socialLinkId },
-    include: { contactProfile: { select: { companyId: true } } },
+    include: {
+      contactProfile: { select: { id: true, version: true, companyId: true } },
+    },
   });
-  if (!existing) throw new AppError(404, "SOCIAL_LINK_NOT_FOUND", "Media sosial tidak ditemukan.");
+  if (!existing)
+    throw new AppError(
+      404,
+      "SOCIAL_LINK_NOT_FOUND",
+      "Media sosial tidak ditemukan.",
+    );
   await assertCompanyAccess(session, existing.contactProfile.companyId);
-  await prisma.$transaction([
-    prisma.socialLink.delete({ where: { id: socialLinkId } }),
-    prisma.auditLog.create({
+  assertProfileContext(existing.contactProfile.companyId, context);
+  await prisma.$transaction(async (transaction) => {
+    await claimProfileVersion(
+      transaction,
+      existing.contactProfile,
+      context?.expectedVersion,
+    );
+    await transaction.socialLink.delete({ where: { id: socialLinkId } });
+    await transaction.auditLog.create({
       data: {
         userId: session.user.id,
         companyId: existing.contactProfile.companyId,
@@ -717,14 +940,15 @@ export async function deleteSocialLink(
         entityId: socialLinkId,
         oldValues: { platform: existing.platform, isActive: existing.isActive },
       },
-    }),
-  ]);
+    });
+  });
 }
 
 export function sessionCanManageCompany(
   session: AuthenticatedSession,
   companyId: string,
 ): Promise<void> {
-  if (session.user.role === UserRole.SUPER_ADMIN) return assertCompanyAccess(session, companyId);
+  if (session.user.role === UserRole.SUPER_ADMIN)
+    return assertCompanyAccess(session, companyId);
   return assertCompanyAccess(session, companyId);
 }

@@ -25,7 +25,9 @@ export class ApiClientError extends Error {
 function readCookie(name: string): string | undefined {
   if (typeof document === "undefined") return undefined;
   const prefix = `${encodeURIComponent(name)}=`;
-  const match = document.cookie.split("; ").find((item) => item.startsWith(prefix));
+  const match = document.cookie
+    .split("; ")
+    .find((item) => item.startsWith(prefix));
   return match ? decodeURIComponent(match.slice(prefix.length)) : undefined;
 }
 
@@ -34,12 +36,17 @@ export async function apiRequest<T>(
   options: {
     method?: "GET" | "POST" | "PATCH" | "DELETE";
     body?: unknown | FormData;
+    profileContext?: { companyId: string; version: number };
   } = {},
 ): Promise<T> {
   const method = options.method ?? "GET";
   const isFormData = options.body instanceof FormData;
   const csrfToken = readCookie(CSRF_COOKIE_NAME);
   const headers = new Headers({ "X-VCard-Request": "1" });
+  if (options.profileContext) {
+    headers.set("X-Profile-Company", options.profileContext.companyId);
+    headers.set("X-Profile-Version", String(options.profileContext.version));
+  }
 
   if (!isFormData && options.body !== undefined) {
     headers.set("Content-Type", "application/json");
@@ -63,7 +70,9 @@ export async function apiRequest<T>(
     body: requestBody,
   });
 
-  const payload = (await response.json().catch(() => ({}))) as ApiErrorPayload & { data?: T };
+  const payload = (await response
+    .json()
+    .catch(() => ({}))) as ApiErrorPayload & { data?: T };
   if (!response.ok) {
     throw new ApiClientError(response.status, payload);
   }

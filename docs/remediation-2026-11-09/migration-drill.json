@@ -1,0 +1,10 @@
+{
+  "status": "passed",
+  "database": "vcard_migration_1794215529565_test",
+  "legacyProfilePreserved": true,
+  "version": 1,
+  "firstPublicationPreserved": true,
+  "existingIndexingPreserved": true,
+  "currentAndHistoricalSlugReservations": 2,
+  "sourceDatabaseChanged": false
+}

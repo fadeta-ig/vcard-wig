@@ -29,6 +29,7 @@ export type SocialLinkView = {
 };
 
 export type ProfileListItemView = {
+  version: number;
   id: string;
   slug: string;
   displayName: string;
@@ -50,6 +51,12 @@ export type ProfileListItemView = {
 };
 
 export type ProfileView = {
+  version: number;
+  firstPublishedAt: string | null;
+  allowIndexing: boolean;
+  showWorkPhone: boolean;
+  showMobilePhone: boolean;
+  showWhatsapp: boolean;
   id: string;
   companyId: string;
   slug: string;

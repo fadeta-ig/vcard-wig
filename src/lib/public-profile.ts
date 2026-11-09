@@ -25,6 +25,8 @@ export type PublicSocialLink = {
 };
 
 export type ActivePublicProfile = {
+  showAvatar?: boolean;
+  allowIndexing?: boolean;
   slug: string;
   displayName: string;
   formattedName: string;
@@ -65,7 +67,11 @@ function cleanNamePart(value: string | null | undefined): string {
 }
 
 function comparableName(value: string): string {
-  return value.toLocaleLowerCase("id-ID").replace(/,\s*/g, " ").replace(/\s+/g, " ").trim();
+  return value
+    .toLocaleLowerCase("id-ID")
+    .replace(/,\s*/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 export function formatPublicDisplayName(
@@ -80,12 +86,10 @@ export function formatPublicDisplayName(
   const comparablePrefix = comparableName(prefix);
   const hasPrefix = Boolean(
     prefix &&
-      comparableBaseName.startsWith(comparablePrefix) &&
-      (
-        comparableBaseName.length === comparablePrefix.length ||
-        comparableBaseName[comparablePrefix.length] === " " ||
-        /[.,]$/.test(comparablePrefix)
-      ),
+    comparableBaseName.startsWith(comparablePrefix) &&
+    (comparableBaseName.length === comparablePrefix.length ||
+      comparableBaseName[comparablePrefix.length] === " " ||
+      /[.,]$/.test(comparablePrefix)),
   );
   let formatted = prefix && !hasPrefix ? `${prefix} ${name}` : name;
 
@@ -93,10 +97,8 @@ export function formatPublicDisplayName(
   const comparableFormatted = comparableName(formatted);
   const hasSuffix = Boolean(
     suffix &&
-      (
-        comparableFormatted === comparableSuffix ||
-        comparableFormatted.endsWith(` ${comparableSuffix}`)
-      ),
+    (comparableFormatted === comparableSuffix ||
+      comparableFormatted.endsWith(` ${comparableSuffix}`)),
   );
   if (suffix && !hasSuffix) {
     formatted = `${formatted.replace(/[,\s]+$/, "")}, ${suffix}`;
@@ -105,13 +107,17 @@ export function formatPublicDisplayName(
 }
 
 export function safeBrandColor(value: string | null | undefined): string {
-  return value && HEX_COLOR.test(value) ? value.toUpperCase() : DEFAULT_PUBLIC_BRAND;
+  return value && HEX_COLOR.test(value)
+    ? value.toUpperCase()
+    : DEFAULT_PUBLIC_BRAND;
 }
 
 function relativeLuminance(hex: string): number {
   const channels = [1, 3, 5].map((index) => {
     const channel = Number.parseInt(hex.slice(index, index + 2), 16) / 255;
-    return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+    return channel <= 0.04045
+      ? channel / 12.92
+      : ((channel + 0.055) / 1.055) ** 2.4;
   });
   return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
 }
@@ -133,12 +139,23 @@ export function readableBrandForeground(hex: string): "#FFFFFF" | "#1A1D21" {
   return whiteContrast >= darkContrast ? "#FFFFFF" : "#1A1D21";
 }
 
-export function safeHttpUrl(value: string | null | undefined): string | undefined {
+export function readableBrandText(hex: string): string {
+  const color = safeBrandColor(hex);
+  return colorContrastRatio(color, "#FFFFFF") >= 4.5
+    ? color
+    : DEFAULT_PUBLIC_BRAND;
+}
+
+export function safeHttpUrl(
+  value: string | null | undefined,
+): string | undefined {
   if (!value) return undefined;
   try {
     const parsed = new URL(value);
-    if (!(["http:", "https:"] as string[]).includes(parsed.protocol)) return undefined;
-    if (parsed.username || parsed.password || !parsed.hostname) return undefined;
+    if (!(["http:", "https:"] as string[]).includes(parsed.protocol))
+      return undefined;
+    if (parsed.username || parsed.password || !parsed.hostname)
+      return undefined;
     return parsed.toString();
   } catch {
     return undefined;
@@ -151,26 +168,49 @@ export function safePublicAsset(
 ): string | undefined {
   if (!value) return undefined;
   const prefix = `/uploads/${category}/`;
-  if (!value.startsWith(prefix) || value.includes("..") || value.includes("\\")) return undefined;
+  if (!value.startsWith(prefix) || value.includes("..") || value.includes("\\"))
+    return undefined;
   return value;
 }
 
-export function telephoneAction(value: string | null | undefined): PublicContactAction | undefined {
-  if (!value || !INTERNATIONAL_PHONE.test(value)) return undefined;
+export function normalizeInternationalPhone(
+  value: string | null | undefined,
+): string | undefined {
+  const normalized = value
+    ?.trim()
+    .replace(/^00/, "+")
+    .replace(/[\s().-]/g, "");
+  return normalized && INTERNATIONAL_PHONE.test(normalized)
+    ? normalized
+    : undefined;
+}
+
+export function telephoneAction(
+  input: string | null | undefined,
+): PublicContactAction | undefined {
+  const value = normalizeInternationalPhone(input);
+  if (!value) return undefined;
   return { value, href: `tel:${value}` };
 }
 
-export function whatsappAction(value: string | null | undefined): PublicContactAction | undefined {
-  if (!value || !INTERNATIONAL_PHONE.test(value)) return undefined;
+export function whatsappAction(
+  input: string | null | undefined,
+): PublicContactAction | undefined {
+  const value = normalizeInternationalPhone(input);
+  if (!value) return undefined;
   return { value, href: `https://wa.me/${value.slice(1)}` };
 }
 
-export function emailAction(value: string | null | undefined): PublicContactAction | undefined {
+export function emailAction(
+  value: string | null | undefined,
+): PublicContactAction | undefined {
   if (!value || /[\r\n?&]/.test(value)) return undefined;
   return { value, href: `mailto:${value}` };
 }
 
-export function websiteAction(value: string | null | undefined): PublicContactAction | undefined {
+export function websiteAction(
+  value: string | null | undefined,
+): PublicContactAction | undefined {
   const href = safeHttpUrl(value);
   return href ? { value: href, href } : undefined;
 }

@@ -21,18 +21,24 @@ const id = {
   profilePhotoAlt: "Foto profil",
   companyLogoAlt: "Logo perusahaan",
   inactiveTitle: "Profil kontak tidak aktif",
-  inactiveDescription: "Profil ini sedang tidak tersedia. Silakan hubungi perusahaan terkait untuk informasi terbaru.",
+  inactiveDescription:
+    "Profil ini sedang tidak tersedia. Silakan hubungi perusahaan terkait untuk informasi terbaru.",
   notFoundTitle: "Profil tidak ditemukan",
-  notFoundDescription: "Tautan profil tidak tersedia atau belum dipublikasikan.",
+  notFoundDescription:
+    "Tautan profil tidak tersedia atau belum dipublikasikan.",
   privacy: "Privasi",
   privacyTitle: "Kebijakan Privasi",
-  privacyIntro: "Halaman kartu kontak menampilkan informasi profesional yang dipublikasikan oleh administrator perusahaan.",
+  privacyIntro:
+    "Halaman kartu kontak menampilkan informasi profesional yang dipublikasikan oleh administrator perusahaan.",
   privacyAnalyticsTitle: "Data penggunaan",
-  privacyAnalytics: "Sistem mencatat jumlah kunjungan dan interaksi secara agregat untuk kebutuhan operasional. Token browser anonim hanya disimpan dalam bentuk hash untuk deduplikasi dan pembatasan abuse. Alamat IP maupun hash IP tidak disimpan.",
+  privacyAnalytics:
+    "Aplikasi menyimpan catatan kunjungan dan interaksi, jenis aktivitas, waktu, hash token browser acak, user-agent, dan origin/path perujuk yang dibatasi panjangnya; query URL perujuk dibuang. Catatan ini dipakai untuk laporan agregat, deduplikasi, dan pembatasan penyalahgunaan. Token mentah berada di cookie browser HttpOnly; database hanya menyimpan hash. Aplikasi tidak menyimpan alamat IP atau hash IP pada catatan ini. Log infrastruktur dikelola terpisah.",
   privacyControlTitle: "Kontrol informasi",
-  privacyControl: "Informasi kontak hanya ditampilkan sesuai pengaturan visibilitas profil. Profil Draft dan Arsip tidak dapat diakses publik.",
+  privacyControl:
+    "Informasi kontak hanya ditampilkan sesuai pengaturan visibilitas profil. Profil Draft dan Arsip tidak dapat diakses publik. Pengaturan indeks mesin pencari tidak membatasi akses: siapa pun yang memiliki tautan profil aktif tetap dapat membukanya. Salinan kontak atau gambar yang sudah diunduh orang lain tidak dapat ditarik kembali.",
   privacyContactTitle: "Tautan eksternal",
-  privacyContact: "Tautan telepon, email, WhatsApp, website, dan media sosial akan membuka aplikasi atau layanan pihak ketiga yang dipilih pengguna.",
+  privacyContact:
+    "Tautan telepon, email, WhatsApp, website, dan media sosial akan membuka aplikasi atau layanan pihak ketiga yang dipilih pengguna.",
   backToProfile: "Kembali ke profil",
 } as const;
 
@@ -54,23 +60,30 @@ const en: PublicProfileCopy = {
   shareTitle: "Share contact card",
   shareText: "Digital contact card",
   linkCopied: "Link copied successfully.",
-  shareFailed: "The link could not be shared. Please copy it from the address bar.",
+  shareFailed:
+    "The link could not be shared. Please copy it from the address bar.",
   opensNewTab: "opens a new tab",
   profilePhotoAlt: "Profile photo",
   companyLogoAlt: "Company logo",
   inactiveTitle: "Contact profile is inactive",
-  inactiveDescription: "This profile is currently unavailable. Please contact the company for the latest information.",
+  inactiveDescription:
+    "This profile is currently unavailable. Please contact the company for the latest information.",
   notFoundTitle: "Profile not found",
-  notFoundDescription: "This profile link is unavailable or has not been published.",
+  notFoundDescription:
+    "This profile link is unavailable or has not been published.",
   privacy: "Privacy",
   privacyTitle: "Privacy Policy",
-  privacyIntro: "Contact-card pages display professional information published by the company administrator.",
+  privacyIntro:
+    "Contact-card pages display professional information published by the company administrator.",
   privacyAnalyticsTitle: "Usage data",
-  privacyAnalytics: "The system records aggregate visit and interaction counts for operational purposes. A random browser token is stored only as a hash for deduplication and abuse controls. Neither IP addresses nor IP hashes are stored.",
+  privacyAnalytics:
+    "The application stores individual visit and interaction records, event types, timestamps, a hash of a random browser token, and length-limited user-agent and referrer origin/path. Referrer URL queries are discarded. Records support aggregate reports, deduplication and abuse prevention. The raw token is kept in an HttpOnly browser cookie; only its hash is stored in the database. These application records contain no IP address or IP hash. Infrastructure logs are managed separately.",
   privacyControlTitle: "Information control",
-  privacyControl: "Contact information is only displayed according to the profile visibility settings. Draft and Archived profiles are not publicly accessible.",
+  privacyControl:
+    "Contact information is displayed according to profile visibility settings. Draft and Archived profiles are not publicly accessible. Search-engine indexing settings do not restrict access: anyone with an active profile link can still open it. Previously downloaded contacts or images cannot be recalled.",
   privacyContactTitle: "External links",
-  privacyContact: "Phone, email, WhatsApp, website, and social links open the application or third-party service selected by the user.",
+  privacyContact:
+    "Phone, email, WhatsApp, website, and social links open the application or third-party service selected by the user.",
   backToProfile: "Back to profile",
 };
 

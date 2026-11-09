@@ -17,7 +17,9 @@ export const revalidate = 0;
 type PageContext = { params: Promise<{ slug: string }> };
 const getProfile = cache((slug: string) => getPublicProfileBySlug(slug));
 
-export async function generateMetadata({ params }: PageContext): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: PageContext): Promise<Metadata> {
   const [{ slug }, locale] = await Promise.all([params, getLocale()]);
   const copy = publicProfileMessages(locale);
   const result = await getProfile(slug);
@@ -38,21 +40,26 @@ export async function generateMetadata({ params }: PageContext): Promise<Metadat
       alternates: { canonical },
       robots: { index: false, follow: false },
       ...(result.profile.brand.faviconUrl
-        ? { icons: { icon: absoluteUrl(origin, result.profile.brand.faviconUrl) } }
+        ? {
+            icons: {
+              icon: absoluteUrl(origin, result.profile.brand.faviconUrl),
+            },
+          }
         : {}),
     };
   }
 
   const profile = result.profile;
-  const description = locale === "en"
-    ? `${profile.jobTitle}${profile.department ? `, ${profile.department}` : ""} at ${profile.companyName}. Digital contact card.`
-    : `${profile.jobTitle}${profile.department ? `, ${profile.department}` : ""} di ${profile.companyName}. Kartu kontak digital.`;
+  const description =
+    locale === "en"
+      ? `${profile.jobTitle}${profile.department ? `, ${profile.department}` : ""} at ${profile.companyName}. Digital contact card.`
+      : `${profile.jobTitle}${profile.department ? `, ${profile.department}` : ""} di ${profile.companyName}. Kartu kontak digital.`;
   const image = profile.photoUrl ?? profile.brand.logoUrl;
   return {
     title: `${profile.formattedName} — ${profile.jobTitle}`,
     description,
     alternates: { canonical },
-    robots: { index: true, follow: true },
+    robots: { index: profile.allowIndexing === true, follow: true },
     ...(profile.brand.faviconUrl
       ? { icons: { icon: absoluteUrl(origin, profile.brand.faviconUrl) } }
       : {}),
@@ -62,7 +69,13 @@ export async function generateMetadata({ params }: PageContext): Promise<Metadat
       siteName: profile.brand.name,
       title: `${profile.formattedName} — ${profile.jobTitle}`,
       description,
-      ...(image ? { images: [{ url: absoluteUrl(origin, image), alt: profile.formattedName }] } : {}),
+      ...(image
+        ? {
+            images: [
+              { url: absoluteUrl(origin, image), alt: profile.formattedName },
+            ],
+          }
+        : {}),
     },
   };
 }
@@ -72,13 +85,18 @@ export default async function PublicProfilePage({ params }: PageContext) {
   const result = await getProfile(slug);
   if (result.kind === "not_found") notFound();
   if (result.kind === "inactive") {
-    return <InactivePublicProfilePage profile={result.profile} locale={locale} />;
+    return (
+      <InactivePublicProfilePage profile={result.profile} locale={locale} />
+    );
   }
   return (
     <PublicProfileCard
       profile={result.profile}
       locale={locale}
-      canonicalUrl={publicProfileUrl(getEnvironment().APP_URL, result.profile.slug)}
+      canonicalUrl={publicProfileUrl(
+        getEnvironment().APP_URL,
+        result.profile.slug,
+      )}
     />
   );
 }

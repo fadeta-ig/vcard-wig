@@ -4,7 +4,8 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { Locale } from "@/i18n/messages";
 import { translate } from "@/i18n/messages";
-import { apiRequest } from "@/lib/api-client";
+import { allowEditorNavigation } from "@/components/admin/unsaved-changes";
+import { ApiClientError, apiRequest } from "@/lib/api-client";
 
 type CompanyOption = { id: string; name: string; isActive: boolean };
 
@@ -18,17 +19,29 @@ export function CompanySwitcher({
   selectedId?: string;
 }) {
   const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const activeCompanies = companies.filter((company) => company.isActive);
 
   async function selectCompany(companyId: string) {
+    if (!allowEditorNavigation()) return;
     setPending(true);
+    setError(null);
     try {
       await apiRequest("/api/admin/context/company", {
         method: "POST",
         body: { companyId },
       });
+      router.push("/admin/profiles");
       router.refresh();
+    } catch (caught) {
+      setError(
+        caught instanceof ApiClientError
+          ? caught.message
+          : locale === "id"
+            ? "Perusahaan belum dapat diganti."
+            : "Unable to switch company.",
+      );
     } finally {
       setPending(false);
     }
@@ -50,6 +63,11 @@ export function CompanySwitcher({
           </option>
         ))}
       </select>
+      {error ? (
+        <span role="alert" className="field-error">
+          {error}
+        </span>
+      ) : null}
     </label>
   );
 }

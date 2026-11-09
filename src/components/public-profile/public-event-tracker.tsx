@@ -26,8 +26,9 @@ export function PublicProfileViewTracker({ slug }: { slug: string }) {
   useEffect(() => {
     const key = `vcard-profile-view:${slug}`;
     try {
-      if (window.sessionStorage.getItem(key)) return;
-      window.sessionStorage.setItem(key, "1");
+      const previous = Number(window.sessionStorage.getItem(key));
+      if (previous && Date.now() - previous < 30 * 60 * 1000) return;
+      window.sessionStorage.setItem(key, String(Date.now()));
     } catch {
       // Private browsing can deny storage; server-side deduplication remains active.
     }
@@ -43,7 +44,12 @@ type TrackedLinkProps = Omit<ComponentProps<"a">, "onClick"> & {
   targetId?: string;
 };
 
-export function TrackedLink({ slug, eventType, targetId, ...props }: TrackedLinkProps) {
+export function TrackedLink({
+  slug,
+  eventType,
+  targetId,
+  ...props
+}: TrackedLinkProps) {
   return (
     <a
       {...props}
@@ -53,4 +59,3 @@ export function TrackedLink({ slug, eventType, targetId, ...props }: TrackedLink
     />
   );
 }
-

@@ -39,9 +39,13 @@ export function buildSecurityHeaders(production: boolean) {
   ];
 }
 
-const securityHeaders = buildSecurityHeaders(process.env.NODE_ENV === "production");
+const securityHeaders = buildSecurityHeaders(
+  process.env.NODE_ENV === "production",
+);
 
 const nextConfig: NextConfig = {
+  // Profile photos are revocable and must never enter the image optimizer cache.
+  images: { localPatterns: [{ pathname: "/uploads/companies/**" }] },
   poweredByHeader: false,
   reactStrictMode: true,
   typedRoutes: true,

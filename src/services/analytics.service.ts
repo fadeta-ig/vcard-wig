@@ -36,10 +36,14 @@ function jakartaDateInput(date: Date): string {
   }).format(date);
 }
 
-function parseDateInput(value: string | undefined, endExclusive = false): Date | undefined {
+function parseDateInput(
+  value: string | undefined,
+  endExclusive = false,
+): Date | undefined {
   if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
   const date = new Date(`${value}T00:00:00+07:00`);
-  if (Number.isNaN(date.getTime()) || jakartaDateInput(date) !== value) return undefined;
+  if (Number.isNaN(date.getTime()) || jakartaDateInput(date) !== value)
+    return undefined;
   if (endExclusive) date.setUTCDate(date.getUTCDate() + 1);
   return date;
 }
@@ -53,17 +57,26 @@ export function parseAnalyticsFilters(
   const defaultFromInput = jakartaDateInput(defaultFrom);
   const requestedFrom = Array.isArray(input.from) ? input.from[0] : input.from;
   const requestedTo = Array.isArray(input.to) ? input.to[0] : input.to;
-  const fromInput = parseDateInput(requestedFrom) ? requestedFrom! : defaultFromInput;
-  const toInput = parseDateInput(requestedTo, true) ? requestedTo! : defaultToInput;
+  const fromInput = parseDateInput(requestedFrom)
+    ? requestedFrom!
+    : defaultFromInput;
+  const toInput = parseDateInput(requestedTo, true)
+    ? requestedTo!
+    : defaultToInput;
   const from = parseDateInput(fromInput)!;
   const toExclusive = parseDateInput(toInput, true)!;
   const maximumRangeMs = 366 * 24 * 60 * 60 * 1_000;
   const normalizedFrom =
-    from < toExclusive && toExclusive.getTime() - from.getTime() <= maximumRangeMs
+    from < toExclusive &&
+    toExclusive.getTime() - from.getTime() <= maximumRangeMs
       ? from
       : new Date(toExclusive.getTime() - 29 * 24 * 60 * 60 * 1_000);
-  const eventInput = Array.isArray(input.eventType) ? input.eventType[0] : input.eventType;
-  const profileInput = Array.isArray(input.profileId) ? input.profileId[0] : input.profileId;
+  const eventInput = Array.isArray(input.eventType)
+    ? input.eventType[0]
+    : input.eventType;
+  const profileInput = Array.isArray(input.profileId)
+    ? input.profileId[0]
+    : input.profileId;
   const pageInput = Array.isArray(input.page) ? input.page[0] : input.page;
   return {
     from: normalizedFrom,
@@ -73,8 +86,13 @@ export function parseAnalyticsFilters(
     ...(ANALYTICS_EVENT_TYPES.includes(eventInput as ActivityEventType)
       ? { eventType: eventInput as ActivityEventType }
       : {}),
-    ...(profileInput && profileInput.length <= 191 ? { profileId: profileInput } : {}),
-    page: Math.max(1, Math.min(10_000, Number.parseInt(pageInput ?? "1", 10) || 1)),
+    ...(profileInput && profileInput.length <= 191
+      ? { profileId: profileInput }
+      : {}),
+    page: Math.max(
+      1,
+      Math.min(10_000, Number.parseInt(pageInput ?? "1", 10) || 1),
+    ),
   };
 }
 
@@ -85,18 +103,31 @@ export function resolveAnalyticsScope(
 ): AnalyticsScope {
   if (requestedScope === "global") {
     if (session.user.role !== UserRole.SUPER_ADMIN) {
-      throw new AppError(403, "FORBIDDEN", "Agregat global hanya tersedia untuk Super Admin.");
+      throw new AppError(
+        403,
+        "FORBIDDEN",
+        "Agregat global hanya tersedia untuk Super Admin.",
+      );
     }
     return { kind: "global", companyId: null, label: "Semua perusahaan" };
   }
   if (!selectedCompany) {
-    return { kind: "company", companyId: null, label: "Perusahaan belum dipilih" };
+    return {
+      kind: "company",
+      companyId: null,
+      label: "Perusahaan belum dipilih",
+    };
   }
-  return { kind: "company", companyId: selectedCompany.id, label: selectedCompany.name };
+  return {
+    kind: "company",
+    companyId: selectedCompany.id,
+    label: selectedCompany.name,
+  };
 }
 
 function profileWhere(scope: AnalyticsScope): Prisma.ContactProfileWhereInput {
-  if (scope.kind === "company" && !scope.companyId) return { id: "__no_company__" };
+  if (scope.kind === "company" && !scope.companyId)
+    return { id: "__no_company__" };
   return scope.companyId ? { companyId: scope.companyId } : {};
 }
 
@@ -105,7 +136,9 @@ function eventWhere(
   dates?: { from: Date; toExclusive: Date },
 ): Prisma.ActivityEventWhereInput {
   return {
-    ...(scope.companyId ? { contactProfile: { companyId: scope.companyId } } : {}),
+    ...(scope.companyId
+      ? { contactProfile: { companyId: scope.companyId } }
+      : {}),
     ...(scope.kind === "company" && !scope.companyId
       ? { contactProfileId: "__no_company__" }
       : {}),
@@ -126,51 +159,57 @@ export async function getDashboardData(scope: AnalyticsScope) {
   const now = new Date();
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1_000);
   const fourteenDaysAgo = new Date(now.getTime() - 13 * 24 * 60 * 60 * 1_000);
-  fourteenDaysAgo.setUTCHours(0, 0, 0, 0);
+  const fourteenDayStart = parseDateInput(jakartaDateInput(fourteenDaysAgo))!;
   const companySql = scope.companyId
     ? Prisma.sql`AND p.companyId = ${scope.companyId}`
     : scope.kind === "company"
       ? Prisma.sql`AND 1 = 0`
       : Prisma.empty;
 
-  const [statusGroups, recentProfiles, eventsThirtyDays, eventGroups, dailyRaw, topRaw] =
-    await Promise.all([
-      prisma.contactProfile.groupBy({
-        by: ["status"],
-        where: profileWhere(scope),
-        _count: { _all: true },
-      }),
-      prisma.contactProfile.findMany({
-        where: profileWhere(scope),
-        select: {
-          id: true,
-          slug: true,
-          displayName: true,
-          jobTitle: true,
-          status: true,
-          createdAt: true,
-          company: { select: { name: true } },
-        },
-        orderBy: { createdAt: "desc" },
-        take: 5,
-      }),
-      prisma.activityEvent.count({
-        where: eventWhere(scope, { from: thirtyDaysAgo, toExclusive: now }),
-      }),
-      prisma.activityEvent.groupBy({
-        by: ["eventType"],
-        where: eventWhere(scope, { from: thirtyDaysAgo, toExclusive: now }),
-        _count: { _all: true },
-      }),
-      prisma.$queryRaw<DailyRaw[]>(Prisma.sql`
-        SELECT DATE(e.createdAt) AS day, COUNT(*) AS total
+  const [
+    statusGroups,
+    recentProfiles,
+    eventsThirtyDays,
+    eventGroups,
+    dailyRaw,
+    topRaw,
+  ] = await Promise.all([
+    prisma.contactProfile.groupBy({
+      by: ["status"],
+      where: profileWhere(scope),
+      _count: { _all: true },
+    }),
+    prisma.contactProfile.findMany({
+      where: profileWhere(scope),
+      select: {
+        id: true,
+        slug: true,
+        displayName: true,
+        jobTitle: true,
+        status: true,
+        createdAt: true,
+        company: { select: { name: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+    }),
+    prisma.activityEvent.count({
+      where: eventWhere(scope, { from: thirtyDaysAgo, toExclusive: now }),
+    }),
+    prisma.activityEvent.groupBy({
+      by: ["eventType"],
+      where: eventWhere(scope, { from: thirtyDaysAgo, toExclusive: now }),
+      _count: { _all: true },
+    }),
+    prisma.$queryRaw<DailyRaw[]>(Prisma.sql`
+        SELECT DATE(CONVERT_TZ(e.createdAt, '+00:00', '+07:00')) AS day, COUNT(*) AS total
         FROM ActivityEvent e
         INNER JOIN ContactProfile p ON p.id = e.contactProfileId
-        WHERE e.createdAt >= ${fourteenDaysAgo} ${companySql}
-        GROUP BY DATE(e.createdAt)
+        WHERE e.createdAt >= ${fourteenDayStart} ${companySql}
+        GROUP BY DATE(CONVERT_TZ(e.createdAt, '+00:00', '+07:00'))
         ORDER BY day ASC
       `),
-      prisma.$queryRaw<TopRaw[]>(Prisma.sql`
+    prisma.$queryRaw<TopRaw[]>(Prisma.sql`
         SELECT p.id, p.displayName, p.slug, p.companyName, COUNT(e.id) AS total
         FROM ContactProfile p
         INNER JOIN ActivityEvent e ON e.contactProfileId = p.id
@@ -179,20 +218,28 @@ export async function getDashboardData(scope: AnalyticsScope) {
         ORDER BY total DESC, p.displayName ASC
         LIMIT 5
       `),
-    ]);
+  ]);
 
   const statusCounts = Object.fromEntries(
     Object.values(ProfileStatus).map((status) => [status, 0]),
   ) as Record<ProfileStatus, number>;
-  for (const group of statusGroups) statusCounts[group.status] = group._count._all;
-  const totalProfiles = Object.values(statusCounts).reduce((sum, count) => sum + count, 0);
+  for (const group of statusGroups)
+    statusCounts[group.status] = group._count._all;
+  const totalProfiles = Object.values(statusCounts).reduce(
+    (sum, count) => sum + count,
+    0,
+  );
   const eventCounts = Object.fromEntries(
     Object.values(ActivityEventType).map((eventType) => [eventType, 0]),
   ) as Record<ActivityEventType, number>;
-  for (const group of eventGroups) eventCounts[group.eventType] = group._count._all;
+  for (const group of eventGroups)
+    eventCounts[group.eventType] = group._count._all;
 
   const dailyMap = new Map(
-    dailyRaw.map((row) => [jakartaDateInput(new Date(row.day)), Number(row.total)]),
+    dailyRaw.map((row) => [
+      jakartaDateInput(new Date(row.day)),
+      Number(row.total),
+    ]),
   );
   const dailyEvents = Array.from({ length: 14 }, (_, index) => {
     const date = new Date(now.getTime() - (13 - index) * 24 * 60 * 60 * 1_000);
@@ -220,7 +267,10 @@ export async function getAnalyticsReport(
   options: { allRows?: boolean } = {},
 ) {
   const baseWhere: Prisma.ActivityEventWhereInput = {
-    ...eventWhere(scope, { from: filters.from, toExclusive: filters.toExclusive }),
+    ...eventWhere(scope, {
+      from: filters.from,
+      toExclusive: filters.toExclusive,
+    }),
     ...(filters.eventType ? { eventType: filters.eventType } : {}),
     ...(filters.profileId ? { contactProfileId: filters.profileId } : {}),
   };
@@ -228,80 +278,112 @@ export async function getAnalyticsReport(
     const allowed = await prisma.contactProfile.count({
       where: { ...profileWhere(scope), id: filters.profileId },
     });
-    if (!allowed) throw new AppError(404, "PROFILE_NOT_FOUND", "Profil tidak ditemukan.");
+    if (!allowed)
+      throw new AppError(404, "PROFILE_NOT_FOUND", "Profil tidak ditemukan.");
   }
 
-  const [groups, availableProfiles] = await Promise.all([
+  const companySql = scope.companyId
+    ? Prisma.sql`AND p.companyId = ${scope.companyId}`
+    : scope.kind === "company"
+      ? Prisma.sql`AND 1 = 0`
+      : Prisma.empty;
+  const typeSql = filters.eventType
+    ? Prisma.sql`AND e.eventType = ${filters.eventType}`
+    : Prisma.empty;
+  const profileSql = filters.profileId
+    ? Prisma.sql`AND p.id = ${filters.profileId}`
+    : Prisma.empty;
+  const whereSql = Prisma.sql`e.createdAt >= ${filters.from} AND e.createdAt < ${filters.toExclusive} ${companySql} ${typeSql} ${profileSql}`;
+  const [groups, availableProfiles, totals] = await Promise.all([
     prisma.activityEvent.groupBy({
-      by: ["contactProfileId", "eventType"],
+      by: ["eventType"],
       where: baseWhere,
       _count: { _all: true },
     }),
     prisma.contactProfile.findMany({
       where: profileWhere(scope),
-      select: { id: true, displayName: true, slug: true, company: { select: { name: true } } },
+      select: {
+        id: true,
+        displayName: true,
+        slug: true,
+        company: { select: { name: true } },
+      },
       orderBy: { displayName: "asc" },
+      take: 500,
     }),
+    prisma.$queryRaw<{ total: bigint }[]>(
+      Prisma.sql`SELECT COUNT(DISTINCT p.id) AS total FROM ActivityEvent e INNER JOIN ContactProfile p ON p.id=e.contactProfileId WHERE ${whereSql}`,
+    ),
   ]);
-  const profileMap = new Map(availableProfiles.map((profile) => [profile.id, profile]));
-  const rowMap = new Map<
-    string,
-    {
-      profileId: string;
-      displayName: string;
-      slug: string;
-      companyName: string;
-      counts: Record<ActivityEventType, number>;
-      total: number;
-    }
-  >();
+  const totalRows = Number(totals[0]?.total ?? 0);
+  if (options.allRows && totalRows > 10000)
+    throw new AppError(
+      422,
+      "EXPORT_TOO_LARGE",
+      "Persempit filter laporan hingga maksimal 10.000 profil sebelum mengekspor.",
+    );
+  const totalPages = Math.max(1, Math.ceil(totalRows / ANALYTICS_PAGE_SIZE));
+  const page = Math.min(filters.page, totalPages);
+  const limit = options.allRows ? Math.max(1, totalRows) : ANALYTICS_PAGE_SIZE;
+  const offset = options.allRows ? 0 : (page - 1) * ANALYTICS_PAGE_SIZE;
+  type ReportRaw = {
+    profileId: string;
+    displayName: string;
+    slug: string;
+    companyName: string;
+    total: bigint;
+  } & Record<ActivityEventType, bigint>;
+  const raw = await prisma.$queryRaw<ReportRaw[]>(Prisma.sql`
+    SELECT p.id AS profileId,p.displayName,p.slug,c.name AS companyName,COUNT(*) AS total,
+      SUM(e.eventType='PROFILE_VIEW') AS PROFILE_VIEW,SUM(e.eventType='VCARD_DOWNLOAD') AS VCARD_DOWNLOAD,
+      SUM(e.eventType='PHONE_CLICK') AS PHONE_CLICK,SUM(e.eventType='WHATSAPP_CLICK') AS WHATSAPP_CLICK,
+      SUM(e.eventType='EMAIL_CLICK') AS EMAIL_CLICK,SUM(e.eventType='SOCIAL_CLICK') AS SOCIAL_CLICK,SUM(e.eventType='SHARE_CLICK') AS SHARE_CLICK
+    FROM ActivityEvent e INNER JOIN ContactProfile p ON p.id=e.contactProfileId INNER JOIN Company c ON c.id=p.companyId
+    WHERE ${whereSql} GROUP BY p.id,p.displayName,p.slug,c.name
+    ORDER BY total DESC,p.displayName ASC,p.id ASC LIMIT ${limit} OFFSET ${offset}
+  `);
   const summary = Object.fromEntries(
     ANALYTICS_EVENT_TYPES.map((eventType) => [eventType, 0]),
   ) as Record<ActivityEventType, number>;
-  for (const group of groups) {
-    const profile = profileMap.get(group.contactProfileId);
-    if (!profile) continue;
-    const row = rowMap.get(profile.id) ?? {
-      profileId: profile.id,
-      displayName: profile.displayName,
-      slug: profile.slug,
-      companyName: profile.company.name,
-      counts: Object.fromEntries(
-        ANALYTICS_EVENT_TYPES.map((eventType) => [eventType, 0]),
-      ) as Record<ActivityEventType, number>,
-      total: 0,
-    };
-    row.counts[group.eventType] = group._count._all;
-    row.total += group._count._all;
-    summary[group.eventType] += group._count._all;
-    rowMap.set(profile.id, row);
-  }
-  const allRows = [...rowMap.values()].sort(
-    (first, second) => second.total - first.total || first.displayName.localeCompare(second.displayName),
-  );
-  const totalPages = Math.max(1, Math.ceil(allRows.length / ANALYTICS_PAGE_SIZE));
-  const page = Math.min(filters.page, totalPages);
-  const rows = options.allRows
-    ? allRows
-    : allRows.slice((page - 1) * ANALYTICS_PAGE_SIZE, page * ANALYTICS_PAGE_SIZE);
+  for (const group of groups) summary[group.eventType] = group._count._all;
+  const rows = raw.map((row) => ({
+    profileId: row.profileId,
+    displayName: row.displayName,
+    slug: row.slug,
+    companyName: row.companyName,
+    total: Number(row.total),
+    counts: Object.fromEntries(
+      ANALYTICS_EVENT_TYPES.map((type) => [type, Number(row[type])]),
+    ) as Record<ActivityEventType, number>,
+  }));
   return {
     rows,
     availableProfiles,
     summary,
     totalEvents: Object.values(summary).reduce((sum, count) => sum + count, 0),
-    pagination: { page, pageSize: ANALYTICS_PAGE_SIZE, totalRows: allRows.length, totalPages },
+    pagination: { page, pageSize: ANALYTICS_PAGE_SIZE, totalRows, totalPages },
   };
 }
 
-function csvCell(value: string | number): string {
-  const text = String(value);
-  return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+export function csvCell(value: string | number): string {
+  if (typeof value === "number") return String(value);
+  const dangerous =
+    /^[\s\uFEFF]*[=+\-@\uFF1D\uFF0B\uFF0D\uFF20]/u.test(value) ||
+    /^[\t\r\n]/.test(value);
+  const text = dangerous ? `'${value}` : value;
+  return `"${text.replaceAll('"', '""')}"`;
 }
 
 export function analyticsCsv(
   rows: Awaited<ReturnType<typeof getAnalyticsReport>>["rows"],
 ): string {
-  const headers = ["Profile", "Company", "Slug", ...ANALYTICS_EVENT_TYPES, "TOTAL"];
+  const headers = [
+    "Profile",
+    "Company",
+    "Slug",
+    ...ANALYTICS_EVENT_TYPES,
+    "TOTAL",
+  ];
   const body = rows.map((row) => [
     row.displayName,
     row.companyName,
@@ -311,4 +393,3 @@ export function analyticsCsv(
   ]);
   return `\uFEFF${[headers, ...body].map((line) => line.map(csvCell).join(",")).join("\r\n")}\r\n`;
 }
-

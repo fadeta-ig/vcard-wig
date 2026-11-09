@@ -1,7 +1,9 @@
 import { z } from "zod";
 
 const environmentSchema = z.object({
-  NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  NODE_ENV: z
+    .enum(["development", "test", "production"])
+    .default("development"),
   DATABASE_HOST: z.string().min(1),
   DATABASE_PORT: z.coerce.number().int().min(1).max(65535),
   DATABASE_USER: z.string().min(1),
@@ -11,9 +13,24 @@ const environmentSchema = z.object({
   APP_URL: z.url(),
   NEXT_PUBLIC_APP_URL: z.url(),
   UPLOAD_DIR: z.string().trim().min(1).optional(),
+  PRIVATE_UPLOAD_DIR: z.string().trim().min(1).optional(),
+  PRIVACY_CONTACT_EMAIL: z.union([z.literal(""), z.email()]).optional(),
+  MFA_ENCRYPTION_KEY: z
+    .union([z.literal(""), z.string().regex(/^[a-fA-F0-9]{64}$/)])
+    .optional(),
   SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(168).default(8),
-  ANALYTICS_RETENTION_DAYS: z.coerce.number().int().min(30).max(3650).default(365),
-  EXPIRED_SESSION_RETENTION_DAYS: z.coerce.number().int().min(1).max(365).default(30),
+  ANALYTICS_RETENTION_DAYS: z.coerce
+    .number()
+    .int()
+    .min(30)
+    .max(3650)
+    .default(365),
+  EXPIRED_SESSION_RETENTION_DAYS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(365)
+    .default(30),
 });
 
 export type AppEnvironment = z.infer<typeof environmentSchema>;
@@ -41,13 +58,19 @@ export function getEnvironment(): AppEnvironment {
     APP_URL: runtimeEnvironment.APP_URL,
     NEXT_PUBLIC_APP_URL: runtimeEnvironment.NEXT_PUBLIC_APP_URL,
     UPLOAD_DIR: runtimeEnvironment.UPLOAD_DIR,
+    PRIVATE_UPLOAD_DIR: runtimeEnvironment.PRIVATE_UPLOAD_DIR,
+    PRIVACY_CONTACT_EMAIL: runtimeEnvironment.PRIVACY_CONTACT_EMAIL,
+    MFA_ENCRYPTION_KEY: runtimeEnvironment.MFA_ENCRYPTION_KEY,
     SESSION_TTL_HOURS: runtimeEnvironment.SESSION_TTL_HOURS,
     ANALYTICS_RETENTION_DAYS: runtimeEnvironment.ANALYTICS_RETENTION_DAYS,
-    EXPIRED_SESSION_RETENTION_DAYS: runtimeEnvironment.EXPIRED_SESSION_RETENTION_DAYS,
+    EXPIRED_SESSION_RETENTION_DAYS:
+      runtimeEnvironment.EXPIRED_SESSION_RETENTION_DAYS,
   });
 
   if (!result.success) {
-    const fields = result.error.issues.map((issue) => issue.path.join(".")).join(", ");
+    const fields = result.error.issues
+      .map((issue) => issue.path.join("."))
+      .join(", ");
     throw new Error(`Konfigurasi environment tidak valid: ${fields}`);
   }
 

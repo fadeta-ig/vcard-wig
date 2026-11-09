@@ -1,0 +1,31 @@
+{
+  "date": "2026-11-09",
+  "confidence": "VERIFIED",
+  "environment": "Loopback only, vcard_wig_test, synthetic company/admin/contact data",
+  "surfaces": ["Next.js Webpack production build", "local development for CSS diagnosis"],
+  "measurements": [
+    {"page": "dashboard", "viewportCssPx": 320, "documentScrollWidth": 305, "companySelectWidth": 271, "explanation": "15px reserved for the vertical scrollbar; tables and chart scroll within their containers"},
+    {"page": "public profile", "viewportCssPx": 320, "documentScrollWidth": 305, "bodyScrollWidth": 305},
+    {"page": "profile list", "viewportCssPx": 1440, "documentScrollWidth": 1440, "tableClientWidth": 1114, "tableScrollWidth": 1114}
+  ],
+  "verified": [
+    "Mobile drawer contains all eight Super Admin destinations and logout",
+    "Native modal initial focus is on its close control",
+    "Archived filter returns the synthetic archived contact",
+    "Permanent-delete dialog is available for the archived contact",
+    "Empty or incorrect slug keeps delete disabled; exact slug enables it",
+    "Cancel closes the delete dialog without submitting deletion",
+    "Delete dialog fits a 390px mobile viewport",
+    "Editor opens public-renderer preview in a mobile dialog",
+    "Public and preview names include honorific prefix/suffix and custom social-link label",
+    "Final production profile list and archived-dialog tab have no captured console errors"
+  ],
+  "screenshots": ["ui-desktop.jpg", "ui-dashboard-mobile.jpg", "ui-public-mobile.jpg", "ui-preview-mobile.jpg", "ui-permanent-delete.jpg"],
+  "limits": [
+    "The permanent-delete submit action was tested by integration tests, not submitted through browser automation",
+    "Unsaved-navigation native confirmation was attempted but cancellation could not be verified because browser input/dialog control timed out",
+    "A development tab retained old client translation assets during dev/production switching and emitted a hydration mismatch; fresh production origin had current labels and no captured console errors",
+    "The final subsequent source change only refines the editor social-help and preview-label text; screenshots precede that wording adjustment",
+    "No physical-device UAT, all-browser matrix, accessibility certification, production review or load testing"
+  ]
+}

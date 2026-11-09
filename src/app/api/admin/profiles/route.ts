@@ -1,5 +1,11 @@
+import { requireProfileMutation } from "@/services/profile-mutation.service";
 import type { NextRequest } from "next/server";
-import { AppError, readJsonBody, routeErrorResponse, successResponse } from "@/lib/api";
+import {
+  AppError,
+  readJsonBody,
+  routeErrorResponse,
+  successResponse,
+} from "@/lib/api";
 import { assertCsrf } from "@/lib/security/request";
 import { profileCreateSchema, profileListQuerySchema } from "@/lib/validation";
 import { resolveSelectedCompany } from "@/services/authorization.service";
@@ -11,7 +17,11 @@ export async function GET(request: NextRequest) {
     const session = await requireRequestSession(request);
     const company = await resolveSelectedCompany(session);
     if (!company) {
-      throw new AppError(409, "COMPANY_REQUIRED", "Pilih atau buat perusahaan terlebih dahulu.");
+      throw new AppError(
+        409,
+        "COMPANY_REQUIRED",
+        "Pilih atau buat perusahaan terlebih dahulu.",
+      );
     }
     const input = profileListQuerySchema.parse(
       Object.fromEntries(request.nextUrl.searchParams.entries()),
@@ -26,12 +36,20 @@ export async function POST(request: NextRequest) {
   try {
     const session = await requireRequestSession(request);
     assertCsrf(request, session);
+    const mutation = await requireProfileMutation(request, session);
     const company = await resolveSelectedCompany(session);
     if (!company) {
-      throw new AppError(409, "COMPANY_REQUIRED", "Pilih atau buat perusahaan terlebih dahulu.");
+      throw new AppError(
+        409,
+        "COMPANY_REQUIRED",
+        "Pilih atau buat perusahaan terlebih dahulu.",
+      );
     }
     const input = profileCreateSchema.parse(await readJsonBody(request));
-    return successResponse(await createProfile(session, company.id, input), 201);
+    return successResponse(
+      await createProfile(session, mutation.expectedCompanyId, input),
+      201,
+    );
   } catch (error) {
     return routeErrorResponse(error);
   }

@@ -13,13 +13,23 @@ import {
   changePassword,
   getSessionFromRequest,
 } from "@/services/auth.service";
+import { listAccessibleCompanies } from "@/services/authorization.service";
 import {
-  listAccessibleCompanies,
-} from "@/services/authorization.service";
-import { removeCompanyAsset, uploadCompanyAsset } from "@/services/company-asset.service";
+  removeCompanyAsset,
+  uploadCompanyAsset,
+} from "@/services/company-asset.service";
 import { createCompany } from "@/services/company.service";
 
 async function cleanDatabase() {
+  if (
+    process.env.DATABASE_NAME !== "vcard_wig_test" ||
+    process.env.DATABASE_HOST !== "127.0.0.1"
+  )
+    throw new Error("Refusing cleanup outside isolated test database.");
+  await prisma.mfaRecoveryCode.deleteMany();
+  await prisma.eventDedupe.deleteMany();
+  await prisma.profileSlugReservation.deleteMany();
+  await prisma.assetDeletionTask.deleteMany();
   await prisma.publicRateLimit.deleteMany();
   await prisma.activityEvent.deleteMany();
   await prisma.socialLink.deleteMany();
@@ -52,7 +62,9 @@ describe.sequential("database integration", () => {
   it("authenticates, stores only a token hash, and resolves the session cookie", async () => {
     await createRoot();
     const bundle = await authenticateUser("ROOT", "temporary-password-123");
-    const stored = await prisma.session.findUniqueOrThrow({ where: { id: bundle.session.id } });
+    const stored = await prisma.session.findUniqueOrThrow({
+      where: { id: bundle.session.id },
+    });
     expect(stored.tokenHash).not.toBe(bundle.sessionToken);
     expect(stored.tokenHash).toHaveLength(64);
 
@@ -67,12 +79,22 @@ describe.sequential("database integration", () => {
     await createRoot(true);
     const current = await authenticateUser("root", "temporary-password-123");
     const other = await authenticateUser("root", "temporary-password-123");
-    await changePassword(current.session, "temporary-password-123", "a-new-secure-password-456");
+    await changePassword(
+      current.session,
+      "temporary-password-123",
+      "a-new-secure-password-456",
+    );
 
-    const user = await prisma.user.findUniqueOrThrow({ where: { username: "root" } });
+    const user = await prisma.user.findUniqueOrThrow({
+      where: { username: "root" },
+    });
     expect(user.mustChangePassword).toBe(false);
-    await expect(verifyPassword(user.passwordHash, "a-new-secure-password-456")).resolves.toBe(true);
-    const revoked = await prisma.session.findUniqueOrThrow({ where: { id: other.session.id } });
+    await expect(
+      verifyPassword(user.passwordHash, "a-new-secure-password-456"),
+    ).resolves.toBe(true);
+    const revoked = await prisma.session.findUniqueOrThrow({
+      where: { id: other.session.id },
+    });
     expect(revoked.revokedAt).toBeInstanceOf(Date);
   });
 
@@ -130,7 +152,9 @@ describe.sequential("database integration", () => {
   it("prevents the final Super Admin from being deactivated", async () => {
     await createRoot();
     const bundle = await authenticateUser("root", "temporary-password-123");
-    await expect(updateAdmin(bundle.session, bundle.session.user.id, { isActive: false })).rejects.toMatchObject({
+    await expect(
+      updateAdmin(bundle.session, bundle.session.user.id, { isActive: false }),
+    ).rejects.toMatchObject({
       code: "SELF_LOCKOUT_PREVENTED",
     });
   });
@@ -163,7 +187,11 @@ describe.sequential("database integration", () => {
     });
     expect(admin.mustChangePassword).toBe(true);
     expect(admin.memberships[0]?.company.id).toBe(company.id);
-    expect(await prisma.auditLog.count({ where: { action: "ADMIN_CREATED", entityId: admin.id } })).toBe(1);
+    expect(
+      await prisma.auditLog.count({
+        where: { action: "ADMIN_CREATED", entityId: admin.id },
+      }),
+    ).toBe(1);
   });
 
   it("validates and processes a real company logo", async () => {
@@ -184,7 +212,11 @@ describe.sequential("database integration", () => {
       defaultQrBackground: "#FFFFFF",
       isActive: true,
     });
-    const png = await sharp({ create: { width: 32, height: 32, channels: 4, background: "#1E3A5F" } }).png().toBuffer();
+    const png = await sharp({
+      create: { width: 32, height: 32, channels: 4, background: "#1E3A5F" },
+    })
+      .png()
+      .toBuffer();
     const result = await uploadCompanyAsset(
       bundle.session,
       company.id,
@@ -192,7 +224,11 @@ describe.sequential("database integration", () => {
       new File([png], "logo.png", { type: "image/png" }),
     );
     expect(result.path).toMatch(/^\/uploads\/companies\/.+\.webp$/);
-    await expect(access(path.resolve(process.cwd(), "public", result.path.replace(/^\//, "")))).resolves.toBeUndefined();
+    await expect(
+      access(
+        path.resolve(process.cwd(), "public", result.path.replace(/^\//, "")),
+      ),
+    ).resolves.toBeUndefined();
     await removeCompanyAsset(bundle.session, company.id, "logo");
   });
 
@@ -215,7 +251,12 @@ describe.sequential("database integration", () => {
       isActive: true,
     });
     await expect(
-      uploadCompanyAsset(bundle.session, company.id, "logo", new File(["not-an-image"], "fake.png", { type: "image/png" })),
+      uploadCompanyAsset(
+        bundle.session,
+        company.id,
+        "logo",
+        new File(["not-an-image"], "fake.png", { type: "image/png" }),
+      ),
     ).rejects.toBeInstanceOf(AppError);
   });
 });

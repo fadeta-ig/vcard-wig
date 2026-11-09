@@ -4,6 +4,11 @@ import type { CSSProperties, ReactNode } from "react";
 import { AdminNavigation } from "@/components/admin/admin-navigation";
 import { CompanySwitcher } from "@/components/admin/company-switcher";
 import { LogoutButton } from "@/components/admin/logout-button";
+import { MobileNavigation } from "@/components/admin/mobile-navigation";
+import {
+  readableBrandForeground,
+  readableBrandText,
+} from "@/lib/public-profile";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { getLocale } from "@/i18n/server";
 import {
@@ -12,7 +17,11 @@ import {
 } from "@/services/authorization.service";
 import { getSessionFromCookies } from "@/services/auth.service";
 
-export default async function AdminLayout({ children }: { children: ReactNode }) {
+export default async function AdminLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
   const session = await getSessionFromCookies();
   if (!session) redirect("/admin/login");
   if (session.user.mustChangePassword) redirect("/admin/change-password");
@@ -25,6 +34,12 @@ export default async function AdminLayout({ children }: { children: ReactNode })
 
   const style = {
     "--brand-primary": selectedCompany?.primaryColor ?? "#1E3A5F",
+    "--brand-foreground": readableBrandForeground(
+      selectedCompany?.primaryColor ?? "#1E3A5F",
+    ),
+    "--brand-ink": readableBrandText(
+      selectedCompany?.primaryColor ?? "#1E3A5F",
+    ),
   } as CSSProperties;
   const initials = session.user.name
     .split(/\s+/)
@@ -35,6 +50,9 @@ export default async function AdminLayout({ children }: { children: ReactNode })
 
   return (
     <div className="admin-layout" style={style}>
+      <a href="#main-content" className="skip-link">
+        {locale === "id" ? "Langsung ke konten" : "Skip to content"}
+      </a>
       <aside className="sidebar">
         <div className="sidebar-brand">
           <div className="brand-lockup">
@@ -43,7 +61,9 @@ export default async function AdminLayout({ children }: { children: ReactNode })
             </span>
             <span>
               <span className="brand-name">Corporate vCard</span>
-              <span className="brand-caption">Administration</span>
+              <span className="brand-caption">
+                {locale === "id" ? "Administrasi" : "Administration"}
+              </span>
             </span>
           </div>
         </div>
@@ -54,6 +74,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
       </aside>
       <div className="admin-main">
         <header className="admin-header">
+          <MobileNavigation locale={locale} role={session.user.role} />
           <CompanySwitcher
             locale={locale}
             companies={companies}
@@ -61,18 +82,25 @@ export default async function AdminLayout({ children }: { children: ReactNode })
           />
           <div className="admin-header-actions">
             <LanguageSwitcher locale={locale} />
+            <div className="header-logout">
+              <LogoutButton locale={locale} />
+            </div>
             <div className="user-summary">
               <span className="user-avatar" aria-hidden="true">
                 {initials || "A"}
               </span>
               <div>
                 <span className="user-name">{session.user.name}</span>
-                <span className="user-role">{session.user.role.replace("_", " ")}</span>
+                <span className="user-role">
+                  {session.user.role.replace("_", " ")}
+                </span>
               </div>
             </div>
           </div>
         </header>
-        <main className="admin-content">{children}</main>
+        <main id="main-content" tabIndex={-1} className="admin-content">
+          {children}
+        </main>
       </div>
     </div>
   );

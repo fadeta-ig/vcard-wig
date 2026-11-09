@@ -29,29 +29,33 @@ const id = {
   "auth.loggingIn": "Memeriksa akun…",
   "auth.logout": "Keluar",
   "auth.invalid": "Username/email atau password tidak sesuai.",
-  "auth.rateLimited": "Terlalu banyak percobaan. Coba kembali beberapa saat lagi.",
+  "auth.rateLimited":
+    "Terlalu banyak percobaan. Coba kembali beberapa saat lagi.",
   "auth.changePasswordTitle": "Ganti password sementara",
-  "auth.changePasswordSubtitle": "Buat password baru minimal 12 karakter sebelum melanjutkan.",
+  "auth.changePasswordSubtitle":
+    "Buat password baru minimal 12 karakter sebelum melanjutkan.",
   "auth.currentPassword": "Password saat ini",
   "auth.newPassword": "Password baru",
   "auth.confirmPassword": "Ulangi password baru",
   "auth.changePassword": "Ganti password",
   "nav.dashboard": "Dashboard",
   "nav.companies": "Perusahaan",
-  "nav.admins": "Admin Users",
+  "nav.admins": "Administrator",
   "nav.companySettings": "Pengaturan Perusahaan",
   "nav.profiles": "Profil",
-  "nav.analytics": "Analytics",
-  "nav.auditLogs": "Audit Logs",
+  "nav.analytics": "Analitik",
+  "nav.auditLogs": "Log audit",
   "dashboard.title": "Dashboard",
   "dashboard.welcome": "Selamat datang",
   "dashboard.subtitle": "Ringkasan fondasi sistem dan akses perusahaan Anda.",
   "dashboard.companies": "Perusahaan dapat diakses",
   "dashboard.admins": "Admin aktif",
   "dashboard.profiles": "Profil kontak",
-  "dashboard.phaseNotice": "Profil publik, vCard, dan QR Code Phase 5 sudah aktif dan siap digunakan.",
+  "dashboard.phaseNotice":
+    "Profil publik, vCard, dan QR Code Phase 5 sudah aktif dan siap digunakan.",
   "company.title": "Manajemen Perusahaan",
-  "company.subtitle": "Kelola identitas, branding, dan default QR setiap perusahaan.",
+  "company.subtitle":
+    "Kelola identitas, branding, dan default QR setiap perusahaan.",
   "company.add": "Tambah Perusahaan",
   "company.edit": "Edit Perusahaan",
   "company.name": "Nama perusahaan",
@@ -71,7 +75,8 @@ const id = {
   "company.favicon": "Favicon",
   "company.upload": "Unggah",
   "company.removeAsset": "Hapus file",
-  "company.empty": "Belum ada perusahaan. Buat perusahaan pertama untuk mulai bekerja.",
+  "company.empty":
+    "Belum ada perusahaan. Buat perusahaan pertama untuk mulai bekerja.",
   "company.created": "Perusahaan berhasil dibuat.",
   "company.updated": "Perusahaan berhasil diperbarui.",
   "company.assetUpdated": "Aset perusahaan berhasil diperbarui.",
@@ -89,12 +94,14 @@ const id = {
   "admin.resetPassword": "Reset password",
   "admin.created": "Admin berhasil dibuat.",
   "admin.updated": "Admin berhasil diperbarui.",
-  "admin.passwordReset": "Password berhasil direset dan seluruh session lama dicabut.",
+  "admin.passwordReset":
+    "Password berhasil direset dan seluruh session lama dicabut.",
   "admin.empty": "Belum ada akun admin lain.",
   "settings.title": "Pengaturan Perusahaan",
   "settings.subtitle": "Pilih perusahaan untuk membuka detail pengaturannya.",
   "forbidden.title": "Akses dibatasi",
-  "forbidden.description": "Akun Anda tidak memiliki izin untuk membuka halaman ini.",
+  "forbidden.description":
+    "Akun Anda tidak memiliki izin untuk membuka halaman ini.",
 } as const;
 
 export type MessageKey = keyof typeof id;
@@ -129,7 +136,8 @@ const en: Record<MessageKey, string> = {
   "auth.invalid": "The username/email or password is incorrect.",
   "auth.rateLimited": "Too many attempts. Please try again later.",
   "auth.changePasswordTitle": "Change temporary password",
-  "auth.changePasswordSubtitle": "Create a new password with at least 12 characters before continuing.",
+  "auth.changePasswordSubtitle":
+    "Create a new password with at least 12 characters before continuing.",
   "auth.currentPassword": "Current password",
   "auth.newPassword": "New password",
   "auth.confirmPassword": "Repeat new password",
@@ -143,13 +151,16 @@ const en: Record<MessageKey, string> = {
   "nav.auditLogs": "Audit Logs",
   "dashboard.title": "Dashboard",
   "dashboard.welcome": "Welcome",
-  "dashboard.subtitle": "A summary of the system foundation and your company access.",
+  "dashboard.subtitle":
+    "A summary of the system foundation and your company access.",
   "dashboard.companies": "Accessible companies",
   "dashboard.admins": "Active administrators",
   "dashboard.profiles": "Contact profiles",
-  "dashboard.phaseNotice": "Phase 5 public profiles, vCards, and QR Codes are active and ready to use.",
+  "dashboard.phaseNotice":
+    "Phase 5 public profiles, vCards, and QR Codes are active and ready to use.",
   "company.title": "Company Management",
-  "company.subtitle": "Manage identity, branding, and QR defaults for every company.",
+  "company.subtitle":
+    "Manage identity, branding, and QR defaults for every company.",
   "company.add": "Add Company",
   "company.edit": "Edit Company",
   "company.name": "Company name",
